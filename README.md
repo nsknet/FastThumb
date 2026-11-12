@@ -1,15 +1,80 @@
 # FastThumb
 
-[![CI](https://github.com/nsknet/FastThumb/actions/workflows/ci.yml/badge.svg)](https://github.com/nsknet/FastThumb/actions/workflows/ci.yml)
-[![NuGet](https://img.shields.io/nuget/v/FastThumb.svg)](https://www.nuget.org/packages/FastThumb)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+<p align="center">
+  <img src="docs/images/hero.svg" alt="FastThumb: any document, image or video to thumbnails and a preview PDF, in-process" width="100%">
+</p>
+
+<p align="center">
+  <a href="https://github.com/nsknet/FastThumb/actions/workflows/ci.yml"><img src="https://github.com/nsknet/FastThumb/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.nuget.org/packages/FastThumb"><img src="https://img.shields.io/nuget/v/FastThumb.svg" alt="NuGet"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-brightgreen.svg" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/price-free-brightgreen.svg" alt="Free">
+  <img src="https://img.shields.io/badge/.NET-8%20%7C%2010-512BD4.svg" alt=".NET 8 | 10">
+  <img src="https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS-0ea5e9.svg" alt="Windows | Linux | macOS">
+</p>
+
+<p align="center">
+  <b>Thumbnails for 40+ file formats with one method call.</b><br>
+  No Office, no LibreOffice, no headless browser, no child processes. Just a NuGet package.<br>
+  <b>Free and open source, MIT licensed.</b> Use it in commercial products, with no fees and no per-server licences.
+</p>
+
+```csharp
+var result = ThumbnailGenerator.Default.GenerateFromFile("deck.pptx");   // thumbnails + preview PDF
+```
 
 FastThumb is a .NET library that turns office documents, spreadsheets, presentations, PDF files, e-books, images and
 videos into thumbnail images and, for paginated documents, a preview PDF of every page. Everything runs in-process:
-no Office installation, no LibreOffice, no headless browser and no child processes. Documents are read and laid out
-by FastThumb's own managed readers, pages are drawn with Skia, PDFs are rendered with PDFium, images are resized and
-encoded with libvips, and a single frame is taken from a video with a small decode-only FFmpeg build. Every input is
-treated as untrusted and is processed within explicit resource limits.
+documents are read and laid out by FastThumb's own managed readers, pages are drawn with Skia, PDFs are rendered with
+PDFium, images are resized and encoded with libvips, and a single frame is taken from a video with a small decode-only
+FFmpeg build. Every input is treated as untrusted and is processed within explicit resource limits.
+
+## Why FastThumb?
+
+| | |
+|---|---|
+| ⚡ **Fast** | One read, one layout, one raster. Every thumbnail size is encoded in parallel on its own core. |
+| 🪶 **Lightweight** | `dotnet add package FastThumb` and you are done. No office suite weighing hundreds of MB to install, patch and babysit, no browser, no daemon. |
+| 🧩 **Modern** | Async, cancellable, thread-safe, DI-friendly, immutable options, .NET 8 and .NET 10, x64 and arm64. |
+| 🛡️ **Safe by default** | Built for untrusted uploads: no macros, no scripts, no network, hard limits on size, depth, pages and time. |
+| 💸 **Free and open source** | MIT license. Read the code, fork it, ship it in closed-source products. No per-server or per-document fees. |
+
+## Why it's fast
+
+<p align="center">
+  <img src="docs/images/why-fast.svg" alt="The usual way spawns an office suite and renders twice; FastThumb parses once, lays out once and encodes in parallel" width="100%">
+</p>
+
+Most document-thumbnail stacks shell out to LibreOffice, Office or a headless browser: write the upload to disk, start
+a heavy process, convert the **whole document** to PDF, parse that PDF **again** to rasterise it, then resize and
+encode each size one after another. Most of the time goes into process start-up, disk I/O and rendering everything
+twice.
+
+FastThumb removes each of those costs:
+
+1. **No process, no temp file.** The input is read once into memory (or, for a seekable video, read in place through
+   stream callbacks). Nothing is spawned and nothing touches the disk.
+2. **Purpose-built readers.** Each format has its own small managed reader that only extracts what a page needs
+   to look right. It never runs macros, fields or scripts, so there is nothing to wait for.
+3. **Lay out once, use twice.** Text is shaped and measured a single time into a `PageScene` display list. The same
+   scene is replayed into the thumbnail bitmap *and* written to the preview PDF: no second render, and the image and
+   the PDF always agree.
+4. **Rasterise only what you see.** Only page 1 is rasterised, once, at the largest requested size. PDFs are drawn
+   by PDFium straight into that bitmap; videos decode a single frame.
+5. **All cores for encoding.** libvips cuts every size from the one bitmap in memory, and the PNG / WebP / JPEG
+   encoders (single-threaded by nature) run concurrently, one size per core. Identical outputs are encoded once.
+6. **Cheap remote videos.** For a seekable video stream only the container header and one group of pictures are read,
+   so a thumbnail of a large video never needs the whole file.
+
+## How it works
+
+<p align="center">
+  <img src="docs/images/pipeline.svg" alt="FastThumb pipeline: detect, read in-process, lay out once, encode in parallel" width="100%">
+</p>
+
+The format is detected from the bytes, a format-specific reader builds a neutral model, the layout engine paginates
+it into page scenes, and libvips produces every output size. The full walkthrough, with the source file behind each
+step, is in [docs/architecture.md](docs/architecture.md).
 
 ## Features
 
@@ -272,7 +337,8 @@ Documentation:
 
 ## License
 
-FastThumb is licensed under the [MIT License](LICENSE).
+FastThumb is **free and open source** under the [MIT License](LICENSE): use it in personal, commercial and
+closed-source products at no cost. Stars, issues and pull requests are very welcome.
 
 The `thumbvideo` native library (`runtimes/<rid>/native/`) statically links a decode-only LGPL build of FFmpeg and the
 BSD-licensed dav1d, so that binary is distributed under the **GNU LGPL 2.1 or later**. Its complete source and build

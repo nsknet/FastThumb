@@ -1,0 +1,154 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1420 600" width="1420" height="600" role="img" aria-labelledby="t d">
+  <title id="t">FastThumb pipeline</title>
+  <desc id="d">Input is detected from its bytes, routed to a format-specific in-process reader, laid out once into a PageScene, then rasterised and encoded by libvips with all sizes in parallel, while the same scene is written to a preview PDF.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#161032"/>
+    </linearGradient>
+    <linearGradient id="core" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22d3ee"/>
+      <stop offset="1" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#94a3b8"/>
+    </marker>
+    <marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#22d3ee"/>
+    </marker>
+    <style>
+      .h{font:600 17px "Segoe UI",-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;fill:#f1f5f9}
+      .s{font:13px "Segoe UI",-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;fill:#94a3b8}
+      .m{font:12px ui-monospace,SFMono-Regular,Consolas,Menlo,monospace;fill:#cbd5e1}
+      .k{font:700 11px "Segoe UI",-apple-system,Helvetica,Arial,sans-serif;fill:#64748b;letter-spacing:.14em}
+      .card{fill:#111827;stroke:#1f2a44;stroke-width:1.5}
+      .ln{fill:none;stroke:#94a3b8;stroke-width:1.6}
+    </style>
+  </defs>
+
+  <rect width="1420" height="600" rx="18" fill="url(#bg)"/>
+
+  <!-- column labels -->
+  <text class="k" x="30" y="44">INPUT</text>
+  <text class="k" x="215" y="44">DETECT</text>
+  <text class="k" x="420" y="44">READ · IN-PROCESS, MANAGED</text>
+  <text class="k" x="795" y="44">LAY OUT ONCE</text>
+  <text class="k" x="1040" y="160">ENCODE</text>
+  <text class="k" x="1250" y="44">OUTPUT</text>
+
+  <!-- input -->
+  <rect class="card" x="30" y="214" width="150" height="150" rx="14"/>
+  <text class="h" x="50" y="250">Your file</text>
+  <text class="m" x="50" y="282">byte[]</text>
+  <text class="m" x="50" y="304">Stream</text>
+  <text class="m" x="50" y="326">path</text>
+  <text class="s" x="50" y="350">async + cancellable</text>
+  <line class="ln" x1="180" y1="289" x2="213" y2="289" marker-end="url(#a)"/>
+
+  <!-- detect -->
+  <rect class="card" x="215" y="204" width="165" height="170" rx="14"/>
+  <text class="h" x="233" y="240">FormatDetector</text>
+  <text class="s" x="233" y="268">magic bytes first,</text>
+  <text class="s" x="233" y="288">extension only for ties</text>
+  <text class="m" x="233" y="320">%PDF · OLE · ZIP</text>
+  <text class="m" x="233" y="340">RIFF · ftyp · EBML</text>
+  <text class="s" x="233" y="362">512 B peek for video</text>
+
+  <!-- fan-out -->
+  <path class="ln" d="M380 289 C400 289 398 105 418 105" marker-end="url(#a)"/>
+  <path class="ln" d="M380 289 C400 289 398 197 418 197" marker-end="url(#a)"/>
+  <path class="ln" d="M380 289 L418 289" marker-end="url(#a)"/>
+  <path class="ln" d="M380 289 C400 289 398 381 418 381" marker-end="url(#a)"/>
+  <path class="ln" d="M380 289 C400 289 398 473 418 473" marker-end="url(#a)"/>
+
+  <!-- lanes -->
+  <g>
+    <rect class="card" x="420" y="70" width="330" height="70" rx="12"/>
+    <rect x="420" y="70" width="5" height="70" rx="2" fill="#8b5cf6"/>
+    <text class="h" x="440" y="98">Documents &amp; e-books</text>
+    <text class="m" x="440" y="122">DOCX DOC RTF ODT HTML MD EPUB MOBI</text>
+  </g>
+  <g>
+    <rect class="card" x="420" y="162" width="330" height="70" rx="12"/>
+    <rect x="420" y="162" width="5" height="70" rx="2" fill="#3b82f6"/>
+    <text class="h" x="440" y="190">Slides, sheets &amp; XPS</text>
+    <text class="m" x="440" y="214">PPTX PPT ODP · XLSX XLSB XLS ODS CSV</text>
+  </g>
+  <g>
+    <rect class="card" x="420" y="254" width="330" height="70" rx="12"/>
+    <rect x="420" y="254" width="5" height="70" rx="2" fill="#f43f5e"/>
+    <text class="h" x="440" y="282">PDF → PDFium</text>
+    <text class="s" x="440" y="306">page 1 drawn straight into a bitmap</text>
+  </g>
+  <g>
+    <rect class="card" x="420" y="346" width="330" height="70" rx="12"/>
+    <rect x="420" y="346" width="5" height="70" rx="2" fill="#10b981"/>
+    <text class="h" x="440" y="374">Images → libvips</text>
+    <text class="s" x="440" y="398">size checked from the header, decoded once</text>
+  </g>
+  <g>
+    <rect class="card" x="420" y="438" width="330" height="70" rx="12"/>
+    <rect x="420" y="438" width="5" height="70" rx="2" fill="#f59e0b"/>
+    <text class="h" x="440" y="466">Video → thumbvideo</text>
+    <text class="s" x="440" y="490">one frame, read in place, no temp file</text>
+  </g>
+
+  <!-- lanes 1-2 into PageScene -->
+  <line class="ln" x1="750" y1="105" x2="793" y2="105" marker-end="url(#a)"/>
+  <line class="ln" x1="750" y1="197" x2="793" y2="197" marker-end="url(#a)"/>
+
+  <!-- PageScene -->
+  <rect x="795" y="70" width="210" height="162" rx="14" fill="#111827" stroke="url(#core)" stroke-width="2"/>
+  <text class="h" x="815" y="102">PageScene</text>
+  <text class="s" x="815" y="128">retained display list</text>
+  <text class="s" x="815" y="152">text shaped &amp; measured once</text>
+  <text class="s" x="815" y="176">replayed to raster and PDF</text>
+  <text class="m" x="815" y="210">Skia · page 1 only</text>
+
+  <!-- preview pdf -->
+  <path class="ln" d="M1005 100 L1248 100" marker-end="url(#a)"/>
+  <text class="s" x="1030" y="90">every page → own PDF writer</text>
+  <rect class="card" x="1250" y="64" width="140" height="74" rx="12"/>
+  <text class="h" x="1268" y="94">preview.pdf</text>
+  <text class="s" x="1268" y="118">searchable text</text>
+
+  <!-- encode -->
+  <line x1="1005" y1="205" x2="1038" y2="205" stroke="#22d3ee" stroke-width="1.8" marker-end="url(#ac)"/>
+  <line x1="750" y1="289" x2="1038" y2="289" stroke="#22d3ee" stroke-width="1.8" marker-end="url(#ac)"/>
+  <line x1="750" y1="381" x2="1038" y2="381" stroke="#22d3ee" stroke-width="1.8" marker-end="url(#ac)"/>
+  <line x1="750" y1="473" x2="1038" y2="473" stroke="#22d3ee" stroke-width="1.8" marker-end="url(#ac)"/>
+
+  <rect x="1040" y="176" width="170" height="332" rx="14" fill="#0f1a2e" stroke="url(#core)" stroke-width="2"/>
+  <text class="h" x="1058" y="208">libvips</text>
+  <text class="s" x="1058" y="232">one bitmap in memory,</text>
+  <text class="s" x="1058" y="252">every size cut from it</text>
+  <g fill="#22d3ee" fill-opacity=".14" stroke="#22d3ee" stroke-opacity=".6">
+    <rect x="1058" y="276" width="134" height="30" rx="7"/>
+    <rect x="1058" y="314" width="134" height="30" rx="7"/>
+    <rect x="1058" y="352" width="134" height="30" rx="7"/>
+    <rect x="1058" y="390" width="134" height="30" rx="7"/>
+  </g>
+  <text class="m" x="1070" y="296">core 1 · 1000 px</text>
+  <text class="m" x="1070" y="334">core 2 ·  500 px</text>
+  <text class="m" x="1070" y="372">core 3 ·  300 px</text>
+  <text class="m" x="1070" y="410">core 4 ·  100 px</text>
+  <text class="s" x="1058" y="450">sizes encoded</text>
+  <text class="s" x="1058" y="470">in parallel</text>
+  <text class="m" x="1058" y="494">PNG · WebP · JPEG</text>
+
+  <!-- result -->
+  <line x1="1210" y1="340" x2="1248" y2="340" stroke="#22d3ee" stroke-width="1.8" marker-end="url(#ac)"/>
+  <rect class="card" x="1250" y="236" width="140" height="210" rx="12"/>
+  <text class="h" x="1268" y="266">Thumbnails</text>
+  <g fill="#1e293b" stroke="#334155">
+    <rect x="1268" y="282" width="56" height="72" rx="5"/>
+    <rect x="1332" y="300" width="40" height="54" rx="4"/>
+    <rect x="1268" y="364" width="28" height="36" rx="3"/>
+    <rect x="1304" y="372" width="20" height="28" rx="3"/>
+    <rect x="1332" y="380" width="14" height="20" rx="2"/>
+  </g>
+  <text class="s" x="1268" y="430">+ timings, pages</text>
+
+  <!-- footer -->
+  <text class="s" x="30" y="572">No Office · no LibreOffice · no headless browser · no child processes · no temp files — everything in your .NET process.</text>
+</svg>

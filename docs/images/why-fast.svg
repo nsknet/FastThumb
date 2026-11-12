@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1420 640" width="1420" height="640" role="img" aria-labelledby="t d">
+  <title id="t">Why FastThumb is fast</title>
+  <desc id="d">The usual approach spawns an office suite or headless browser, writes temp files, converts the whole document to PDF and renders it again. FastThumb parses once in-process, lays out once, rasterises only page 1 and encodes every size in parallel.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b1020"/>
+      <stop offset="1" stop-color="#161032"/>
+    </linearGradient>
+    <linearGradient id="core" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#22d3ee"/>
+      <stop offset="1" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <style>
+      .t{font:700 22px "Segoe UI",-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif}
+      .h{font:600 16px "Segoe UI",-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;fill:#f1f5f9}
+      .s{font:13px "Segoe UI",-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;fill:#94a3b8}
+      .n{font:700 13px ui-monospace,SFMono-Regular,Consolas,Menlo,monospace}
+      .tag{font:600 11px "Segoe UI",-apple-system,Helvetica,Arial,sans-serif;letter-spacing:.04em}
+      .big{font:800 30px "Segoe UI",-apple-system,BlinkMacSystemFont,Helvetica,Arial,sans-serif;fill:#f1f5f9}
+    </style>
+  </defs>
+
+  <rect width="1420" height="640" rx="18" fill="url(#bg)"/>
+
+  <!-- ===== LEFT: the usual way ===== -->
+  <rect x="30" y="30" width="660" height="580" rx="16" fill="#0f141f" stroke="#2a2f3d"/>
+  <text class="t" x="60" y="74" fill="#94a3b8">The usual way</text>
+  <text class="s" x="60" y="98">shell out to LibreOffice / Office / a headless browser</text>
+
+  <g>
+    <!-- steps -->
+    <g transform="translate(60,124)">
+      <rect width="600" height="54" rx="10" fill="#151b28" stroke="#2a2f3d"/>
+      <text class="n" x="18" y="33" fill="#64748b">1</text>
+      <text class="h" x="46" y="33">Write upload to a temp file</text>
+      <rect x="470" y="16" width="112" height="22" rx="11" fill="#f43f5e" fill-opacity=".14"/>
+      <text class="tag" x="526" y="31" text-anchor="middle" fill="#fb7185">DISK I/O</text>
+    </g>
+    <g transform="translate(60,190)">
+      <rect width="600" height="54" rx="10" fill="#151b28" stroke="#2a2f3d"/>
+      <text class="n" x="18" y="33" fill="#64748b">2</text>
+      <text class="h" x="46" y="33">Spawn a whole office suite</text>
+      <rect x="470" y="16" width="112" height="22" rx="11" fill="#f43f5e" fill-opacity=".14"/>
+      <text class="tag" x="526" y="31" text-anchor="middle" fill="#fb7185">COLD START</text>
+    </g>
+    <g transform="translate(60,256)">
+      <rect width="600" height="54" rx="10" fill="#151b28" stroke="#2a2f3d"/>
+      <text class="n" x="18" y="33" fill="#64748b">3</text>
+      <text class="h" x="46" y="33">Convert every page to PDF</text>
+      <rect x="470" y="16" width="112" height="22" rx="11" fill="#f43f5e" fill-opacity=".14"/>
+      <text class="tag" x="526" y="31" text-anchor="middle" fill="#fb7185">RENDER #1</text>
+    </g>
+    <g transform="translate(60,322)">
+      <rect width="600" height="54" rx="10" fill="#151b28" stroke="#2a2f3d"/>
+      <text class="n" x="18" y="33" fill="#64748b">4</text>
+      <text class="h" x="46" y="33">Parse that PDF again and rasterise it</text>
+      <rect x="470" y="16" width="112" height="22" rx="11" fill="#f43f5e" fill-opacity=".14"/>
+      <text class="tag" x="526" y="31" text-anchor="middle" fill="#fb7185">RENDER #2</text>
+    </g>
+    <g transform="translate(60,388)">
+      <rect width="600" height="54" rx="10" fill="#151b28" stroke="#2a2f3d"/>
+      <text class="n" x="18" y="33" fill="#64748b">5</text>
+      <text class="h" x="46" y="33">Resize &amp; encode each size, one by one</text>
+      <rect x="470" y="16" width="112" height="22" rx="11" fill="#f43f5e" fill-opacity=".14"/>
+      <text class="tag" x="526" y="31" text-anchor="middle" fill="#fb7185">SERIAL</text>
+    </g>
+    <g transform="translate(60,454)">
+      <rect width="600" height="54" rx="10" fill="#151b28" stroke="#2a2f3d"/>
+      <text class="n" x="18" y="33" fill="#64748b">6</text>
+      <text class="h" x="46" y="33">Read files back, clean up, kill hung processes</text>
+      <rect x="470" y="16" width="112" height="22" rx="11" fill="#f43f5e" fill-opacity=".14"/>
+      <text class="tag" x="526" y="31" text-anchor="middle" fill="#fb7185">OPS PAIN</text>
+    </g>
+  </g>
+  <text class="s" x="60" y="560">Hundreds of MB to install · a process per file · temp-file races</text>
+  <text class="s" x="60" y="582">Video? Another tool (ffmpeg CLI) and another child process.</text>
+
+  <!-- ===== RIGHT: FastThumb ===== -->
+  <rect x="730" y="30" width="660" height="580" rx="16" fill="#0f1a2e" stroke="url(#core)" stroke-width="2"/>
+  <text class="t" x="760" y="74" fill="url(#core)">FastThumb</text>
+  <text class="s" x="760" y="98">one method call inside your own .NET process</text>
+
+  <g>
+    <g transform="translate(760,124)">
+      <rect width="600" height="54" rx="10" fill="#111f36" stroke="#1e3a5f"/>
+      <text class="n" x="18" y="33" fill="#22d3ee">1</text>
+      <text class="h" x="46" y="33">Read the bytes once, straight from memory</text>
+      <rect x="470" y="16" width="112" height="22" rx="11" fill="#22d3ee" fill-opacity=".14"/>
+      <text class="tag" x="526" y="31" text-anchor="middle" fill="#67e8f9">0 TEMP FILES</text>
+    </g>
+    <g transform="translate(760,190)">
+      <rect width="600" height="54" rx="10" fill="#111f36" stroke="#1e3a5f"/>
+      <text class="n" x="18" y="33" fill="#22d3ee">2</text>
+      <text class="h" x="46" y="33">Own managed reader for the format</text>
+      <rect x="470" y="16" width="112" height="22" rx="11" fill="#22d3ee" fill-opacity=".14"/>
+      <text class="tag" x="526" y="31" text-anchor="middle" fill="#67e8f9">0 PROCESSES</text>
+    </g>
+    <g transform="translate(760,256)">
+      <rect width="600" height="54" rx="10" fill="#111f36" stroke="#1e3a5f"/>
+      <text class="n" x="18" y="33" fill="#22d3ee">3</text>
+      <text class="h" x="46" y="33">Lay out once into a PageScene</text>
+      <rect x="470" y="16" width="112" height="22" rx="11" fill="#22d3ee" fill-opacity=".14"/>
+      <text class="tag" x="526" y="31" text-anchor="middle" fill="#67e8f9">1 LAYOUT</text>
+    </g>
+    <g transform="translate(760,322)">
+      <rect width="600" height="54" rx="10" fill="#111f36" stroke="#1e3a5f"/>
+      <text class="n" x="18" y="33" fill="#22d3ee">4</text>
+      <text class="h" x="46" y="33">Rasterise page 1 only, at the largest size</text>
+      <rect x="470" y="16" width="112" height="22" rx="11" fill="#22d3ee" fill-opacity=".14"/>
+      <text class="tag" x="526" y="31" text-anchor="middle" fill="#67e8f9">1 RASTER</text>
+    </g>
+    <g transform="translate(760,388)">
+      <rect width="600" height="54" rx="10" fill="#111f36" stroke="#1e3a5f"/>
+      <text class="n" x="18" y="33" fill="#22d3ee">5</text>
+      <text class="h" x="46" y="33">Cut every size from it, encode in parallel</text>
+      <rect x="470" y="16" width="112" height="22" rx="11" fill="#22d3ee" fill-opacity=".14"/>
+      <text class="tag" x="526" y="31" text-anchor="middle" fill="#67e8f9">ALL CORES</text>
+    </g>
+    <g transform="translate(760,454)">
+      <rect width="600" height="54" rx="10" fill="#111f36" stroke="#1e3a5f"/>
+      <text class="n" x="18" y="33" fill="#22d3ee">6</text>
+      <text class="h" x="46" y="33">Same scene → preview PDF, no second render</text>
+      <rect x="470" y="16" width="112" height="22" rx="11" fill="#22d3ee" fill-opacity=".14"/>
+      <text class="tag" x="526" y="31" text-anchor="middle" fill="#67e8f9">REUSED</text>
+    </g>
+  </g>
+  <text class="s" x="760" y="560">One free MIT NuGet package · thread-safe singleton · cancellable</text>
+  <text class="s" x="760" y="582">Video: one frame decoded through stream callbacks, no ffmpeg process.</text>
+</svg>
