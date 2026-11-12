@@ -201,8 +201,10 @@ Behaviour:
 - Data is read through two callbacks, so the source can be any seekable stream (a file, memory, cloud storage). No
   temporary file and no child process.
 - The frame is the one at `fraction` of the duration (0.5 is the middle; values above 0.98 are treated as 0.98):
-  seek to the keyframe before it, then decode forward for at most 1.5 seconds (and at most 900 packets); when that
-  budget runs out, the latest decoded picture is returned.
+  seek to the keyframe before it, then decode forward towards it. The walk is bounded by a count, not a clock: at
+  most 900 packets, and fewer for large pictures (at most 10^9 decoded pixels, so about 480 frames of 1080p or 120 of
+  4K, never fewer than 25). When the bound is reached the latest decoded picture is returned. Because the bound does
+  not depend on timing, the same input always gives the same frame.
 - If the container reports no duration, the position is taken as a fraction of the file size where the container
   allows seeking by bytes.
 - If no frame can be decoded there (a truncated file, no keyframe after that point, a container that cannot seek),

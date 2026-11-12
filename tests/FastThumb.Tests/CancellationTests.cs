@@ -89,15 +89,17 @@ public class CancellationTests
             var docx = OfficeFiles.LargeDocx(paragraphs);
             using var source = new CancellationTokenSource();
             using var stream = new MemoryStream(docx, false);
+            // measured from the cancellation, not from the start: a loaded CI machine may take seconds to get there
+            var sinceCancel = new Stopwatch();
+            using var registration = source.Token.Register(sinceCancel.Start);
             source.CancelAfter(TimeSpan.FromMilliseconds(30));
-            var clock = Stopwatch.StartNew();
             try
             {
                 await Generator.GenerateAsync(stream, "large.docx", source.Token);
             }
             catch (OperationCanceledException)
             {
-                Assert.True(clock.Elapsed < TimeSpan.FromSeconds(5), $"stopped after {clock.ElapsedMilliseconds} ms");
+                Assert.True(sinceCancel.Elapsed < TimeSpan.FromSeconds(3), $"stopped {sinceCancel.ElapsedMilliseconds} ms after the cancellation");
                 return;
             }
             Assert.True(paragraphs < 200_000, "the document was never slow enough to be cancelled mid-way");

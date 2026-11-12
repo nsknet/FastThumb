@@ -6,7 +6,7 @@
  * never has to track FFmpeg's ABI.
  *
  * The frame is the one at `fraction` of the duration (0.5 = the middle): seek to the keyframe before it, then
- * decode forward, within a time budget. Only that one group of pictures is read, so a seekable network
+ * decode forward, within a bounded number of pictures. Only that one group of pictures is read, so a seekable network
  * stream is cheap to thumbnail.
  */
 #include <limits.h>
@@ -55,7 +55,9 @@
 #define MAX_AFTER_KEY    48     /* video packets fed after the keyframe before forcing the decoder to flush */
 #define MAX_WAIT_FOR_KEY 300    /* video packets skipped while waiting for a keyframe flag */
 #define MAX_FORWARD      900    /* video packets decoded past the keyframe on the way to the wanted time */
-#define FORWARD_BUDGET_US 1500000   /* ... and the time that walk may take before the latest picture is taken */
+#define MIN_FORWARD      25
+#define FORWARD_PIXELS   1000000000LL   /* ... fewer for larger pictures: that walk decodes at most this many pixels.
+                                           A count, not a clock, so the same input always gives the same frame. */
 #define MAX_THREADS      4
 #define MAX_SIDE         16384
 #define MAX_PIXELS       (8192 * 4352)   /* per frame, checked by the decoders before they allocate: 8K DCI fits, a
@@ -132,13 +134,17 @@ static int reached(const AVFrame *frame, int64_t target)
 /*
  * Decodes from the current position: waits for a keyframe, feeds it and what follows until a picture comes out,
  * then keeps decoding towards `target` (stream time base; AV_NOPTS_VALUE = the first picture will do).
- * The walk forward is bounded: when the budget runs out the latest picture is returned, so a long group of
- * pictures in a heavy video costs a bounded amount of time and still yields a frame past the keyframe.
+ * The walk forward is bounded by the number of pictures (fewer for larger ones), not by a clock: when the bound is
+ * reached the latest picture is returned, so a long group of pictures in a heavy video costs a bounded amount of work,
+ * still yields a frame past the keyframe, and the same input always gives the same frame.
  */
 static int grab(State *s, AVFrame *frame, int64_t target)
 {
     int read = 0, waited = 0, fed = 0, failures = 0, started = 0, have = 0, forward = 0, ret;
-    int64_t budget_end = 0;
+    int64_t pixels = (int64_t)s->decoder->width * s->decoder->height, limit = MAX_FORWARD;
+
+    if (pixels > 0 && FORWARD_PIXELS / pixels < limit) limit = FORWARD_PIXELS / pixels;
+    if (limit < MIN_FORWARD) limit = MIN_FORWARD;
 
     avcodec_flush_buffers(s->decoder);
     for (;;) {
@@ -157,13 +163,13 @@ static int grab(State *s, AVFrame *frame, int64_t target)
             if (ret < 0) break;
             av_frame_unref(frame);
             av_frame_move_ref(frame, s->scratch);
-            if (!have) { have = 1; budget_end = av_gettime_relative() + FORWARD_BUDGET_US; }
+            have = 1;
             if (reached(frame, target)) return 0;
             ret = 0;
         }
         if (have) {
             if (ret != AVERROR(EAGAIN)) return 0;             /* damaged further on: what we have is good */
-            if (++forward > MAX_FORWARD || av_gettime_relative() > budget_end) return 0;
+            if (++forward > limit) return 0;
             continue;
         }
         if (ret != AVERROR(EAGAIN)) {                         /* damaged data: start over at the next keyframe */
