@@ -172,7 +172,7 @@ internal static class FormatDetector
         DocumentFormat.Html => HtmlReader.Read(DecodeHtml(data)),
         DocumentFormat.Mhtml => HtmlReader.ReadMhtml(data),
         DocumentFormat.Rtf => RtfReader.Read(data),
-        DocumentFormat.Markdown => TextReaders.ReadMarkdown(Decode(data, null)),
+        DocumentFormat.Markdown => MarkdownReader.Read(Decode(data, null)),
         DocumentFormat.Text => TextReaders.ReadText(Decode(data, null)),
         DocumentFormat.WordMl => DocxReader.FromWordMl(Decode(data, null)),
         DocumentFormat.Mobi => MobiReader.Read(data),

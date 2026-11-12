@@ -102,7 +102,7 @@ step, is in [docs/architecture.md](docs/architecture.md).
 | Category | Formats |
 |---|---|
 | Word processing | DOCX/DOCM/DOTX/DOTM, Flat OPC XML, Word 2003 XML, DOC/DOT (Word 97-2003), RTF, ODT/OTT |
-| Web and text | HTML/XHTML, MHTML, Markdown, plain text |
+| Web and text | HTML/XHTML, MHTML, Markdown (CommonMark + GFM), plain text |
 | E-books and help | EPUB, MOBI/AZW/AZW3, CHM |
 | Legacy (text only) | HWP 5.x, WordPerfect 6+, Microsoft Works |
 | Spreadsheets | XLSX/XLSM/XLTX, XLSB, XLS (BIFF8), ODS/OTS, CSV/TSV |

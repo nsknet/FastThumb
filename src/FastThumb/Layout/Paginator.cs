@@ -160,7 +160,7 @@ internal sealed class Paginator
                 if (scene == _scene)
                 {
                     if (p.Props.Shade is { } shade) _scene.InsertFill(mark, new SKRect(x + p.Props.IndentLeft, startY, x + width - p.Props.IndentRight, y), shade);
-                    if (p.Props.BorderBottom) _scene.Line(x + p.Props.IndentLeft, y + 1.5f, x + width - p.Props.IndentRight, y + 1.5f, 0.75f, new SKColor(0xFF4472C4));
+                    if (p.Props.BorderBottom) _scene.Line(x + p.Props.IndentLeft, y + 1.5f, x + width - p.Props.IndentRight, y + 1.5f, 0.75f, p.Props.BorderColor ?? new SKColor(0xFF4472C4));
                 }
                 if (p.Props.BreakAfter && _cellDepth == 0)
                 {
@@ -375,6 +375,11 @@ internal sealed class Paginator
                 {
                     var offset = Math.Max(1f, token.Props.Size * 0.12f);
                     _scene.Line(cursor, baseline + offset, cursor + token.Width + (token.Space ? gap : 0), baseline + offset, Math.Max(0.5f, token.Props.Size / 18f), token.Props.Color);
+                }
+                if (token.Props.Strike && token.Width > 0 && token.Image == null)
+                {
+                    var middle = baseline - token.Props.Size * 0.3f;
+                    _scene.Line(cursor, middle, cursor + token.Width + (token.Space ? gap : 0), middle, Math.Max(0.5f, token.Props.Size / 18f), token.Props.Color);
                 }
                 cursor += token.Width + (token.Space ? gap : 0);
             }

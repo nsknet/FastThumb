@@ -9,7 +9,7 @@ internal sealed class RunProps
 {
     public string Font = "Times New Roman";
     public float Size = 10f;
-    public bool Bold, Italic, Underline;
+    public bool Bold, Italic, Underline, Strike;
     public SKColor Color = SKColors.Black;
     public RunProps Clone() => (RunProps)MemberwiseClone();
 }
@@ -26,6 +26,7 @@ internal sealed class ParaProps
     public RunProps? BulletProps;
     public List<(float Position, int Kind)>? Tabs;          // custom tab stops from the left edge; kind 0 left, 1 centre, 2 right
     public bool BorderBottom, BreakAfter;                  // paragraph bottom rule; section break (new page) after it
+    public SKColor? BorderColor;                           // colour of the bottom rule (Word blue when null)
     public SKColor? Shade;                                 // paragraph background
     public bool AutoBefore, AutoAfter;                     // Word "auto" spacing: 14pt, collapsing with the neighbour
     public ParaProps Clone() => (ParaProps)MemberwiseClone();

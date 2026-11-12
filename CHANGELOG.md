@@ -5,6 +5,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Markdown**: a new reader that follows CommonMark and the GitHub extensions (simplified, no new dependency): setext
+  headings, block quotes, nested and task lists, indented code, table column alignment, strikethrough, links,
+  autolinks, escapes and entities. Code blocks are drawn in a shaded box and only page 1 of a long file is parsed.
+
 ## [1.0.0] - 2026-11-12
 
 First public release.
