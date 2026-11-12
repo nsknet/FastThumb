@@ -32,7 +32,11 @@ internal sealed class Highlighter
             "private protected public readonly record ref required return sbyte scoped sealed set short sizeof stackalloc static string " +
             "struct switch this throw try typeof uint ulong unchecked unsafe ushort using value var virtual void volatile when where while with yield"),
         Constants = Words("true false null"),
-        Line = "//", BlockOpen = "/*", BlockClose = "*/", Multi = ["\"\"\""], Preprocessor = true,
+        Line = "//",
+        BlockOpen = "/*",
+        BlockClose = "*/",
+        Multi = ["\"\"\""],
+        Preprocessor = true,
     };
 
     private static readonly Lang Python = new()
@@ -41,7 +45,9 @@ internal sealed class Highlighter
             "import in is lambda match nonlocal not or pass raise return try while with yield"),
         Constants = Words("True False None"),
         Builtins = Words("self cls print len range open int str float list dict set tuple bool type isinstance super enumerate zip map filter"),
-        Hash = true, Multi = ["\"\"\"", "'''"], Decorators = true,
+        Hash = true,
+        Multi = ["\"\"\"", "'''"],
+        Decorators = true,
     };
 
     private static readonly Lang JavaScript = new()
@@ -50,7 +56,10 @@ internal sealed class Highlighter
             "enum export extends finally for from function get if implements import in instanceof interface keyof let new of private " +
             "protected public readonly return set static super switch this throw try type typeof var void while with yield"),
         Constants = Words("true false null undefined NaN Infinity"),
-        Line = "//", BlockOpen = "/*", BlockClose = "*/", Multi = ["`"],
+        Line = "//",
+        BlockOpen = "/*",
+        BlockClose = "*/",
+        Multi = ["`"],
     };
 
     private static readonly Lang Shell = new()
@@ -59,7 +68,8 @@ internal sealed class Highlighter
             "unset shift exit break continue source alias set trap eval exec"),
         Builtins = Words("echo printf cd pwd read test cat ls grep sed awk mkdir rm cp mv chmod chown sudo curl wget git dotnet npm npx " +
             "pip python node docker tar find xargs touch head tail sort"),
-        Hash = true, Variables = true,
+        Hash = true,
+        Variables = true,
     };
 
     private static readonly Lang CLike = new()                  // Java, C, C++, Go, Rust, Kotlin, Swift: one shared word list
@@ -70,7 +80,10 @@ internal sealed class Highlighter
             "static struct super switch template this throw throws trait try type typedef typename union unsigned use using val var virtual " +
             "void volatile when where while"),
         Constants = Words("true false null nil nullptr None Some Ok Err"),
-        Line = "//", BlockOpen = "/*", BlockClose = "*/", Preprocessor = true,
+        Line = "//",
+        BlockOpen = "/*",
+        BlockClose = "*/",
+        Preprocessor = true,
     };
 
     private static readonly Lang Markup = new() { Mode = Mode.Markup };
@@ -78,15 +91,47 @@ internal sealed class Highlighter
 
     private static readonly Dictionary<string, Lang> Languages = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["cs"] = CSharp, ["c#"] = CSharp, ["csharp"] = CSharp,
-        ["py"] = Python, ["python"] = Python, ["python3"] = Python,
-        ["js"] = JavaScript, ["javascript"] = JavaScript, ["jsx"] = JavaScript, ["mjs"] = JavaScript, ["ts"] = JavaScript,
-        ["typescript"] = JavaScript, ["tsx"] = JavaScript, ["json"] = JavaScript, ["jsonc"] = JavaScript,
-        ["sh"] = Shell, ["bash"] = Shell, ["shell"] = Shell, ["zsh"] = Shell, ["console"] = Shell, ["shellscript"] = Shell,
-        ["html"] = Markup, ["htm"] = Markup, ["xml"] = Markup, ["svg"] = Markup, ["xaml"] = Markup, ["vue"] = Markup,
-        ["css"] = Css, ["scss"] = Css, ["less"] = Css,
-        ["java"] = CLike, ["c"] = CLike, ["h"] = CLike, ["cpp"] = CLike, ["c++"] = CLike, ["go"] = CLike, ["rust"] = CLike,
-        ["rs"] = CLike, ["kotlin"] = CLike, ["kt"] = CLike, ["swift"] = CLike,
+        ["cs"] = CSharp,
+        ["c#"] = CSharp,
+        ["csharp"] = CSharp,
+        ["py"] = Python,
+        ["python"] = Python,
+        ["python3"] = Python,
+        ["js"] = JavaScript,
+        ["javascript"] = JavaScript,
+        ["jsx"] = JavaScript,
+        ["mjs"] = JavaScript,
+        ["ts"] = JavaScript,
+        ["typescript"] = JavaScript,
+        ["tsx"] = JavaScript,
+        ["json"] = JavaScript,
+        ["jsonc"] = JavaScript,
+        ["sh"] = Shell,
+        ["bash"] = Shell,
+        ["shell"] = Shell,
+        ["zsh"] = Shell,
+        ["console"] = Shell,
+        ["shellscript"] = Shell,
+        ["html"] = Markup,
+        ["htm"] = Markup,
+        ["xml"] = Markup,
+        ["svg"] = Markup,
+        ["xaml"] = Markup,
+        ["vue"] = Markup,
+        ["css"] = Css,
+        ["scss"] = Css,
+        ["less"] = Css,
+        ["java"] = CLike,
+        ["c"] = CLike,
+        ["h"] = CLike,
+        ["cpp"] = CLike,
+        ["c++"] = CLike,
+        ["go"] = CLike,
+        ["rust"] = CLike,
+        ["rs"] = CLike,
+        ["kotlin"] = CLike,
+        ["kt"] = CLike,
+        ["swift"] = CLike,
     };
 
     private static readonly HashSet<string> Declarers = Words("class def function func fn fun struct interface enum record trait type");

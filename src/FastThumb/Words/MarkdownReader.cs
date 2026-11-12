@@ -220,7 +220,9 @@ internal static partial class MarkdownReader
         {
             var run = new RunProps
             {
-                Font = Sans, Bold = true, Color = level == 6 ? Muted : Ink,
+                Font = Sans,
+                Bold = true,
+                Color = level == 6 ? Muted : Ink,
                 Size = level switch { 1 => 21, 2 => 16.5f, 3 => 13.5f, 4 => 11.5f, 5 => 10.5f, _ => 10 },
             };
             var p = new Paragraph
@@ -294,7 +296,8 @@ internal static partial class MarkdownReader
             {
                 Grid = new float[header.Count],
                 Borders = new Borders { Top = true, Left = true, Bottom = true, Right = true, InsideH = true, InsideV = true },
-                PadTop = 3, PadBottom = 3,
+                PadTop = 3,
+                PadBottom = 3,
             };
             var bold = Body.Clone();
             bold.Bold = true;
@@ -510,98 +513,98 @@ internal static partial class MarkdownReader
                         continue;
 
                     case '`':
-                    {
-                        var n = 0;
-                        while (i + n < text.Length && text[i + n] == '`') n++;
-                        var close = -1;
-                        if (backtickRuns.TryGetValue(n, out var queue))
                         {
-                            while (queue.Count > 0 && queue.Peek() <= i) queue.Dequeue();
-                            if (queue.Count > 0) close = queue.Dequeue();
+                            var n = 0;
+                            while (i + n < text.Length && text[i + n] == '`') n++;
+                            var close = -1;
+                            if (backtickRuns.TryGetValue(n, out var queue))
+                            {
+                                while (queue.Count > 0 && queue.Peek() <= i) queue.Dequeue();
+                                if (queue.Count > 0) close = queue.Dequeue();
+                            }
+                            if (close < 0) { buffer.Append('`', n); i += n; continue; }
+                            var code = text[(i + n)..close].Replace('\n', ' ');
+                            if (code.Length > 1 && code[0] == ' ' && code[^1] == ' ' && code.Trim().Length > 0) code = code[1..^1];
+                            Add(new Token { Text = code, Style = style | Style.Code });
+                            i = close + n;
+                            continue;
                         }
-                        if (close < 0) { buffer.Append('`', n); i += n; continue; }
-                        var code = text[(i + n)..close].Replace('\n', ' ');
-                        if (code.Length > 1 && code[0] == ' ' && code[^1] == ' ' && code.Trim().Length > 0) code = code[1..^1];
-                        Add(new Token { Text = code, Style = style | Style.Code });
-                        i = close + n;
-                        continue;
-                    }
 
                     case '*' or '_' or '~':
-                    {
-                        var n = 0;
-                        while (i + n < text.Length && text[i + n] == c) n++;
-                        var before = i == 0 ? ' ' : text[i - 1];
-                        var after = i + n >= text.Length ? ' ' : text[i + n];
-                        var left = !char.IsWhiteSpace(after) && (!IsPunctuation(after) || char.IsWhiteSpace(before) || IsPunctuation(before));
-                        var right = !char.IsWhiteSpace(before) && (!IsPunctuation(before) || char.IsWhiteSpace(after) || IsPunctuation(after));
-                        var token = new Token { Delim = c, Count = n, Original = n, Style = style };
-                        if (c == '_') { token.Open = left && (!right || IsPunctuation(before)); token.Close = right && (!left || IsPunctuation(after)); }
-                        else { token.Open = left; token.Close = right; }
-                        if (c == '~' && n > 2) token.Open = token.Close = false;
-                        Add(token);
-                        i += n;
-                        continue;
-                    }
+                        {
+                            var n = 0;
+                            while (i + n < text.Length && text[i + n] == c) n++;
+                            var before = i == 0 ? ' ' : text[i - 1];
+                            var after = i + n >= text.Length ? ' ' : text[i + n];
+                            var left = !char.IsWhiteSpace(after) && (!IsPunctuation(after) || char.IsWhiteSpace(before) || IsPunctuation(before));
+                            var right = !char.IsWhiteSpace(before) && (!IsPunctuation(before) || char.IsWhiteSpace(after) || IsPunctuation(after));
+                            var token = new Token { Delim = c, Count = n, Original = n, Style = style };
+                            if (c == '_') { token.Open = left && (!right || IsPunctuation(before)); token.Close = right && (!left || IsPunctuation(after)); }
+                            else { token.Open = left; token.Close = right; }
+                            if (c == '~' && n > 2) token.Open = token.Close = false;
+                            Add(token);
+                            i += n;
+                            continue;
+                        }
 
                     case '!' when i + 1 < text.Length && text[i + 1] == '[' && TryLink(i + 1, image: true):
                     case '[' when TryLink(i, image: false):
                         continue;
 
                     case '<':
-                    {
-                        var auto = Autolink().Match(text, i);
-                        if (auto.Success && auto.Index == i)
                         {
-                            Add(new Token { Text = auto.Groups[1].Value, Style = style | Style.Link });
-                            i += auto.Length;
-                            continue;
+                            var auto = Autolink().Match(text, i);
+                            if (auto.Success && auto.Index == i)
+                            {
+                                Add(new Token { Text = auto.Groups[1].Value, Style = style | Style.Link });
+                                i += auto.Length;
+                                continue;
+                            }
+                            var tag = InlineTag().Match(text, i);
+                            if (tag.Success && tag.Index == i)
+                            {
+                                if (tag.Groups[1].Value.Equals("br", StringComparison.OrdinalIgnoreCase)) Add(new Token { Break = true });
+                                i += tag.Length;
+                                continue;
+                            }
+                            break;
                         }
-                        var tag = InlineTag().Match(text, i);
-                        if (tag.Success && tag.Index == i)
-                        {
-                            if (tag.Groups[1].Value.Equals("br", StringComparison.OrdinalIgnoreCase)) Add(new Token { Break = true });
-                            i += tag.Length;
-                            continue;
-                        }
-                        break;
-                    }
 
                     case '&':
-                    {
-                        var entity = Entity().Match(text, i);
-                        if (entity.Success && entity.Index == i)
                         {
-                            buffer.Append(WebUtility.HtmlDecode(entity.Value));
-                            i += entity.Length;
-                            continue;
+                            var entity = Entity().Match(text, i);
+                            if (entity.Success && entity.Index == i)
+                            {
+                                buffer.Append(WebUtility.HtmlDecode(entity.Value));
+                                i += entity.Length;
+                                continue;
+                            }
+                            break;
                         }
-                        break;
-                    }
 
                     case 'h' or 'w' when (i == 0 || char.IsWhiteSpace(text[i - 1]) || text[i - 1] is '(' or '*' or '_' or '~'):
-                    {
-                        var bare = BareLink().Match(text, i);
-                        if (bare.Success && bare.Index == i)
                         {
-                            var url = bare.Value.TrimEnd('?', '!', '.', ',', ':', '*', '_', '~', '\'', '"');
-                            while (url.EndsWith(')') && url.Count(ch => ch == ')') > url.Count(ch => ch == '(')) url = url[..^1];
-                            Add(new Token { Text = url, Style = style | Style.Link });
-                            i += url.Length;
-                            continue;
+                            var bare = BareLink().Match(text, i);
+                            if (bare.Success && bare.Index == i)
+                            {
+                                var url = bare.Value.TrimEnd('?', '!', '.', ',', ':', '*', '_', '~', '\'', '"');
+                                while (url.EndsWith(')') && url.Count(ch => ch == ')') > url.Count(ch => ch == '(')) url = url[..^1];
+                                Add(new Token { Text = url, Style = style | Style.Link });
+                                i += url.Length;
+                                continue;
+                            }
+                            break;
                         }
-                        break;
-                    }
 
                     case '\n':
-                    {
-                        var spaces = 0;
-                        while (buffer.Length > 0 && buffer[^1] == ' ') { buffer.Length--; spaces++; }
-                        if (spaces >= 2) Add(new Token { Break = true }); else buffer.Append(' ');
-                        i++;
-                        while (i < text.Length && text[i] == ' ') i++;
-                        continue;
-                    }
+                        {
+                            var spaces = 0;
+                            while (buffer.Length > 0 && buffer[^1] == ' ') { buffer.Length--; spaces++; }
+                            if (spaces >= 2) Add(new Token { Break = true }); else buffer.Append(' ');
+                            i++;
+                            while (i < text.Length && text[i] == ' ') i++;
+                            continue;
+                        }
                 }
                 buffer.Append(c);
                 i++;
