@@ -1,0 +1,5 @@
+/* ELF: export the three entry points only, keep every FFmpeg symbol private to the library */
+{
+  global: tv_frame; tv_free; tv_version;
+  local: *;
+};

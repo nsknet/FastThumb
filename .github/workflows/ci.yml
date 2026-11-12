@@ -1,0 +1,142 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
+  pull_request:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  native:
+    uses: ./.github/workflows/native.yml
+
+  format:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet format FastThumb.slnx --verify-no-changes --severity warn
+      - name: English only
+        run: python3 eng/check-clean.py
+
+  test:
+    name: test (${{ matrix.os }})
+    needs: native
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # x64 and arm64 on each platform
+        os: [ubuntu-24.04, ubuntu-24.04-arm, windows-2025, windows-11-arm, macos-15, macos-15-intel]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # MinVer reads the version from tags
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: thumbvideo-*
+          path: artifacts/native
+
+      - name: Place native libraries
+        shell: bash
+        run: sh eng/place-natives.sh artifacts/native
+
+      - name: Fonts (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fontconfig fonts-liberation fonts-crosextra-carlito fonts-crosextra-caladea fonts-dejavu-core
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+          global-json-file: global.json
+
+      - run: dotnet build FastThumb.slnx -c Release
+
+      - run: dotnet test FastThumb.slnx -c Release --no-build --logger trx --results-directory artifacts/test-results
+
+      - name: CLI smoke test
+        run: dotnet src/FastThumb.Cli/bin/Release/net8.0/FastThumb.Cli.dll info
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ matrix.os }}
+          path: artifacts/test-results
+
+  package:
+    # pack exactly as a release does, then install the package into a fresh app and run it
+    name: package (${{ matrix.os }})
+    needs: native
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: thumbvideo-*
+          path: artifacts/native
+
+      - name: Place native libraries
+        shell: bash
+        run: sh eng/place-natives.sh artifacts/native
+
+      - name: Fonts (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fontconfig fonts-liberation fonts-crosextra-carlito
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+          global-json-file: global.json
+
+      - run: dotnet pack FastThumb.slnx -c Release -o artifacts/packages
+
+      - name: Check package layout
+        shell: bash
+        run: sh eng/check-package.sh artifacts/packages
+
+      - name: Install the package into a new app and run it
+        shell: bash
+        run: sh eng/smoke/run.sh artifacts/packages
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.os == 'ubuntu-24.04'
+        with:
+          name: packages
+          path: artifacts/packages
+
+  docker:
+    needs: native
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: thumbvideo-linux-x64
+          path: src/FastThumb/runtimes/linux-x64/native
+      - run: docker build -t fastthumb .
+      - run: docker run --rm --network none fastthumb info

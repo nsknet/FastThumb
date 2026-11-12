@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <RootNamespace>FastThumb</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible>false</IsAotCompatible>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- CA1416: Skia, libvips and PDFium are portable even though some of their APIs carry platform attributes -->
+    <NoWarn>$(NoWarn);CA1416;CS1573</NoWarn>
+
+    <PackageId>FastThumb</PackageId>
+    <Description>Fast, in-process thumbnails and preview PDFs for office documents, spreadsheets, presentations, PDF, e-books, images and video. No Office, no LibreOffice, no external processes. Windows, Linux and macOS.</Description>
+    <PackageTags>thumbnail;preview;document;pdf;docx;xlsx;pptx;image;video;render</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="FastThumb.Cli" />
+    <InternalsVisibleTo Include="FastThumb.Tests" />
+    <InternalsVisibleTo Include="FastThumb.Benchmarks" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" />
+    <PackageReference Include="NetVips" />
+    <PackageReference Include="NetVips.Native" />
+    <PackageReference Include="bblanchon.PDFium.Win32" />
+    <PackageReference Include="bblanchon.PDFium.Linux" />
+    <PackageReference Include="bblanchon.PDFium.macOS" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="all" />
+    <PackageReference Include="MinVer" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!--
+    thumbvideo, the native video frame reader (native/thumbvideo), one library per runtime identifier under runtimes/<rid>/native.
+    The binaries are build outputs (CI, or native/thumbvideo/build.sh), not sources: whatever is present is copied next to the
+    application and packed at the path NuGet expects.
+  -->
+  <ItemGroup>
+    <None Include="runtimes\**\*" Pack="true" PackagePath="runtimes" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" Visible="false" />
+    <None Include="..\..\THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>

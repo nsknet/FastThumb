@@ -1,0 +1,19 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="SkiaSharp" Version="3.119.4" />
+    <PackageVersion Include="SkiaSharp.NativeAssets.Linux" Version="3.119.4" />
+    <PackageVersion Include="NetVips" Version="3.2.0" />
+    <PackageVersion Include="NetVips.Native" Version="8.18.7" />
+    <PackageVersion Include="bblanchon.PDFium.Win32" Version="159.0.8152" />
+    <PackageVersion Include="bblanchon.PDFium.Linux" Version="159.0.8152" />
+    <PackageVersion Include="bblanchon.PDFium.macOS" Version="159.0.8152" />
+    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.404" />
+    <PackageVersion Include="MinVer" Version="7.0.0" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.1" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+</Project>

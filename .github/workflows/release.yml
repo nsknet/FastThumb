@@ -1,0 +1,67 @@
+name: release
+
+# Push a tag such as v1.2.0. This builds the natives, runs the full CI matrix, packs FastThumb with the version taken
+# from the tag, publishes it to nuget.org and creates a GitHub release with the package attached.
+#
+# nuget.org: Trusted Publishing (OIDC) is used when the repository variable NUGET_USER is set to the nuget.org account
+# name and a trusted publishing policy for this repository and workflow exists on nuget.org. Otherwise the secret
+# NUGET_API_KEY is used.
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: ci
+    runs-on: ubuntu-24.04
+    environment: nuget
+    permissions:
+      contents: write   # GitHub release
+      id-token: write   # nuget.org trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: packages
+          path: artifacts/packages
+
+      - name: Check that the package carries the tag's version
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          ls -l artifacts/packages
+          test -f "artifacts/packages/FastThumb.$version.nupkg"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: nuget.org login (trusted publishing)
+        id: login
+        if: vars.NUGET_USER != ''
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_USER }}
+
+      - name: Push to nuget.org
+        shell: bash
+        env:
+          NUGET_KEY: ${{ steps.login.outputs.NUGET_API_KEY || secrets.NUGET_API_KEY }}
+        run: |
+          if [ -z "$NUGET_KEY" ]; then
+            echo "No nuget.org credentials: set the variable NUGET_USER (trusted publishing) or the secret NUGET_API_KEY." >&2
+            exit 1
+          fi
+          dotnet nuget push "artifacts/packages/*.nupkg" --api-key "$NUGET_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" artifacts/packages/* --title "$GITHUB_REF_NAME" --generate-notes --verify-tag

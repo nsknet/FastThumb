@@ -1,0 +1,4 @@
+* text=auto eol=lf
+*.sh text eol=lf
+*.cs text eol=lf
+*.{png,jpg,jpeg,webp,gif,pdf,docx,xlsx,pptx,mp4,webm,mkv,dll,so,dylib} binary

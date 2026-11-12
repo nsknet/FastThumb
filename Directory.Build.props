@@ -1,0 +1,26 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+
+    <Authors>nsknet</Authors>
+    <Copyright>Copyright (c) nsknet</Copyright>
+    <PackageProjectUrl>https://github.com/nsknet/FastThumb</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/nsknet/FastThumb</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+
+    <!-- version from the git tag (v1.2.3); untagged builds get a pre-release number -->
+    <MinVerTagPrefix>v</MinVerTagPrefix>
+    <MinVerDefaultPreReleaseIdentifiers>preview.0</MinVerDefaultPreReleaseIdentifiers>
+  </PropertyGroup>
+</Project>

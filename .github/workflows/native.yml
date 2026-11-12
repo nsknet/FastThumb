@@ -1,0 +1,50 @@
+name: native
+
+# Builds thumbvideo (native/thumbvideo) for every runtime identifier. All targets are cross-compiled with zig on one
+# Linux runner; the result is cached by the hash of native/thumbvideo, so it only rebuilds when the native code changes.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: thumbvideo ${{ matrix.rid }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [linux-x64, linux-arm64, win-x64, win-arm64, osx-x64, osx-arm64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore from cache
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: src/FastThumb/runtimes/${{ matrix.rid }}
+          key: thumbvideo-${{ matrix.rid }}-${{ hashFiles('native/thumbvideo/**') }}
+
+      - name: Install toolchain
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends nasm ninja-build make
+          pipx install meson==1.12.1
+
+      - uses: mlugg/setup-zig@v2
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          version: 0.17.1
+
+      - name: Build
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: JOBS=$(nproc) sh native/thumbvideo/build.sh ${{ matrix.rid }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: thumbvideo-${{ matrix.rid }}
+          path: src/FastThumb/runtimes/${{ matrix.rid }}/native
+          if-no-files-found: error

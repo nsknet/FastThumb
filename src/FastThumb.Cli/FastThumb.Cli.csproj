@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Command-line front end over the library: a working example of the API and a way to try a format or a platform.
+    It is part of the source tree only and is not published as a package; docs/cli.md shows how to run it.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- one build serves every runtime: net8.0, rolled forward to whatever newer .NET is installed -->
+    <TargetFramework>net8.0</TargetFramework>
+    <RollForward>Major</RollForward>
+    <RootNamespace>FastThumb.Cli</RootNamespace>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FastThumb\FastThumb.csproj" />
+    <PackageReference Include="MinVer" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

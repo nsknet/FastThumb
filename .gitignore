@@ -1,0 +1,19 @@
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.idea/
+TestResults/
+artifacts/
+*.nupkg
+*.snupkg
+
+# thumbvideo: source checkouts and build trees, and the built libraries (CI or native/thumbvideo/build.sh make them)
+native/thumbvideo/.work/
+src/FastThumb/runtimes/
+
+# never commit keys or licence files
+*.lic
+*.pfx
+*.snk
