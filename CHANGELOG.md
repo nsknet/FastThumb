@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Markdown**: a new reader that follows CommonMark and the GitHub extensions (simplified, no new dependency): setext
   headings, block quotes, nested and task lists, indented code, table column alignment, strikethrough, links,
   autolinks, escapes and entities. Code blocks are drawn in a shaded box and only page 1 of a long file is parsed.
+- **Markdown**: fenced code gets simple GitHub-style syntax colours for C#, Python, JavaScript/TypeScript/JSON,
+  HTML/XML, CSS, shell and a few C-like languages (Java, C/C++, Go, Rust, Kotlin, Swift).
 
 ## [1.0.0] - 2026-11-12
 

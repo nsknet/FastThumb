@@ -104,7 +104,7 @@ internal static partial class MarkdownReader
                         if (Indent(l) < 4 && lt.StartsWith(marker, StringComparison.Ordinal) && lt.TrimEnd().All(c => c == marker[0])) break;
                         code.Add(StripIndent(l, indent));
                     }
-                    yield return CodeBlock(code);
+                    yield return CodeBlock(code, Highlighter.For(t[marker.Length..]));
                     yield return Spacer();
                     continue;
                 }
@@ -235,14 +235,29 @@ internal static partial class MarkdownReader
         /// <summary>Tables carry no spacing of their own: this gap follows code blocks and tables.</summary>
         private static Paragraph Spacer() => new() { Props = new ParaProps { SpaceAfter = 9 }, MarkProps = new RunProps { Size = 1 } };
 
-        private static Table CodeBlock(List<string> code)
+        /// <summary>GitHub's light-theme syntax colours, by <see cref="Highlighter.Kind"/>.</summary>
+        private static readonly SKColor[] SyntaxColors =
+        [
+            Ink, new(0xFFCF222E), new(0xFF0A3069), new(0xFF6E7781), new(0xFF0550AE),   // plain, keyword, string, comment, number
+            new(0xFF8250DF), new(0xFF116329), new(0xFF0550AE), new(0xFF953800),         // entity, tag, attribute, variable
+        ];
+
+        private static Table CodeBlock(List<string> code, Highlighter? highlighter = null)
         {
             var run = new RunProps { Font = Mono, Size = 9.5f, Color = Ink };
+            var runs = new RunProps[SyntaxColors.Length];
             var cell = new Cell { Fill = Shade };
             foreach (var line in code)
             {
                 var p = new Paragraph { Props = new ParaProps(), MarkProps = run };
-                if (line.Length > 0) p.Inlines.Add(new TextInline { Props = run, Text = line });
+                if (highlighter == null) { if (line.Length > 0) p.Inlines.Add(new TextInline { Props = run, Text = line }); }
+                else
+                    foreach (var (text, kind) in highlighter.Line(line))
+                    {
+                        var props = runs[(int)kind] ??= run.Clone();
+                        props.Color = SyntaxColors[(int)kind];
+                        p.Inlines.Add(new TextInline { Props = props, Text = text });
+                    }
                 cell.Blocks.Add(p);
             }
             if (cell.Blocks.Count == 0) cell.Blocks.Add(new Paragraph { Props = new ParaProps(), MarkProps = run });

@@ -233,6 +233,93 @@ public class MarkdownTests
         Assert.NotNull(result.PreviewPdf);
     }
 
+    // ---- syntax highlighting ----------------------------------------------------------------------
+
+    /// <summary>The kind of the piece holding <paramref name="text"/> on the given line.</summary>
+    private static Highlighter.Kind KindOf(List<(string Text, Highlighter.Kind Kind)> line, string text) =>
+        line.FirstOrDefault(p => p.Text.Contains(text)) is { Text: not null } piece ? piece.Kind
+        : throw new Xunit.Sdk.XunitException($"No \"{text}\" in [{string.Join(" | ", line.Select(p => $"{p.Text}:{p.Kind}"))}]");
+
+    [Theory]
+    [InlineData("cs", "public static int Add(int a) => a + 42; // sum", "public", "Add", "42", "// sum")]
+    [InlineData("python", "def greet(name): return f\"hi {name}\"  # say", "def", "greet", "hi", "# say")]
+    [InlineData("js", "const n = parse('x', 3) /* c */", "const", "parse", "3", "/* c */")]
+    public void Code_keywords_names_strings_numbers_comments(string lang, string code, string keyword, string name, string literal, string comment)
+    {
+        var line = Highlighter.For(lang)!.Line(code);
+        Assert.Equal(Highlighter.Kind.Keyword, KindOf(line, keyword));
+        Assert.Equal(Highlighter.Kind.Entity, KindOf(line, name));
+        Assert.Contains(KindOf(line, literal), new[] { Highlighter.Kind.String, Highlighter.Kind.Number });
+        Assert.Equal(Highlighter.Kind.Comment, KindOf(line, comment));
+        Assert.Equal(code, string.Concat(line.Select(p => p.Text)));
+    }
+
+    [Fact]
+    public void Block_comments_and_multiline_strings_carry_to_the_next_line()
+    {
+        var cs = Highlighter.For("csharp")!;
+        cs.Line("int a; /* open");
+        Assert.Equal(Highlighter.Kind.Comment, KindOf(cs.Line("still */ int b;"), "still"));
+        var py = Highlighter.For("py")!;
+        py.Line("doc = \"\"\"first");
+        var second = py.Line("second\"\"\" if x else None");
+        Assert.Equal(Highlighter.Kind.String, KindOf(second, "second"));
+        Assert.Equal(Highlighter.Kind.Keyword, KindOf(second, "if"));
+    }
+
+    [Fact]
+    public void Markup_tags_attributes_and_comments()
+    {
+        var html = Highlighter.For("html")!;
+        var line = html.Line("<a href=\"/x\" class=btn>Go &amp; see</a> <!-- note -->");
+        Assert.Equal(Highlighter.Kind.Tag, KindOf(line, "a"));
+        Assert.Equal(Highlighter.Kind.Attr, KindOf(line, "href"));
+        Assert.Equal(Highlighter.Kind.String, KindOf(line, "\"/x\""));
+        Assert.Equal(Highlighter.Kind.Plain, KindOf(line, "Go"));
+        Assert.Equal(Highlighter.Kind.Comment, KindOf(line, "note"));
+    }
+
+    [Fact]
+    public void Css_selectors_properties_and_values()
+    {
+        var css = Highlighter.For("css")!;
+        var head = css.Line("@media screen { .card:hover, h1 {");
+        Assert.Equal(Highlighter.Kind.Keyword, KindOf(head, "@media"));
+        Assert.Equal(Highlighter.Kind.Entity, KindOf(head, ".card"));
+        Assert.Equal(Highlighter.Kind.Entity, KindOf(head, ":hover"));
+        Assert.Equal(Highlighter.Kind.Tag, KindOf(head, "h1"));
+        var body = css.Line("  color: #fff; margin: 4px !important;");
+        Assert.Equal(Highlighter.Kind.Attr, KindOf(body, "color"));
+        Assert.Equal(Highlighter.Kind.Number, KindOf(body, "#fff"));
+        Assert.Equal(Highlighter.Kind.Number, KindOf(body, "4px"));
+        Assert.Equal(Highlighter.Kind.Keyword, KindOf(body, "!important"));
+    }
+
+    [Fact]
+    public void Shell_commands_variables_and_comments()
+    {
+        var line = Highlighter.For("bash")!.Line("if [ -n \"$X\" ]; then echo ${HOME} $1; fi # done");
+        Assert.Equal(Highlighter.Kind.Keyword, KindOf(line, "if"));
+        Assert.Equal(Highlighter.Kind.Attr, KindOf(line, "echo"));
+        Assert.Equal(Highlighter.Kind.Variable, KindOf(line, "${HOME}"));
+        Assert.Equal(Highlighter.Kind.Variable, KindOf(line, "$1"));
+        Assert.Equal(Highlighter.Kind.Comment, KindOf(line, "# done"));
+        Assert.DoesNotContain(Highlighter.For("sh")!.Line("echo ${#a} a#b"), p => p.Kind == Highlighter.Kind.Comment);
+    }
+
+    [Fact]
+    public void Fenced_code_is_coloured_only_for_a_known_language()
+    {
+        var coloured = Blocks("```cs\nvar x = \"s\";\n```").OfType<Table>().Single();
+        var runs = ((Paragraph)coloured.Rows[0].Cells[0].Blocks[0]).Inlines.OfType<TextInline>().ToList();
+        Assert.Equal("var x = \"s\";", string.Concat(runs.Select(r => r.Text)));
+        Assert.True(runs.Select(r => r.Props.Color).Distinct().Count() >= 2);
+        Assert.Null(Highlighter.For("brainfuck"));
+        Assert.Null(Highlighter.For(""));
+        var plain = Blocks("```\nvar x = 1;\n```").OfType<Table>().Single();
+        Assert.Single(((Paragraph)plain.Rows[0].Cells[0].Blocks[0]).Inlines);
+    }
+
     // ---- hostile input --------------------------------------------------------------------------
 
     public static TheoryData<string, string> Hostile() => new()
@@ -247,6 +334,10 @@ public class MarkdownTests
         { "lists", string.Concat(Enumerable.Range(0, 3000).Select(n => new string(' ', n * 2) + "- item\n")) },
         { "entities", string.Concat(Enumerable.Repeat("&#x", 100_000)) },
         { "table", "|a|\n|-|\n" + string.Concat(Enumerable.Repeat("|" + new string('`', 3) + "|\n", 20_000)) },
+        { "code words", "```cs\n" + string.Concat(Enumerable.Repeat("a ", 500_000)) + "\n```" },
+        { "code strings", "```py\n" + string.Concat(Enumerable.Repeat("'\\'", 200_000)) + "\n```" },
+        { "css values", "```css\na{" + string.Concat(Enumerable.Repeat("b ", 300_000)) + ":\n```" },
+        { "markup tags", "```html\n" + string.Concat(Enumerable.Repeat("<a b=\"", 100_000)) + "\n```" },
     };
 
     [Theory]
