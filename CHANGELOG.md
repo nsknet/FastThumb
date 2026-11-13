@@ -5,14 +5,7 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Changed
-
-- The package carries a short, Markdown-only README, so its page on nuget.org no longer shows raw HTML or broken
-  images.
-
-## [Unreleased]
+## [1.4.0] - 2026-11-13
 
 ### Added
 
@@ -30,6 +23,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Less memory for non-seekable streams**: `GenerateAsync` held such a stream's bytes about twice while the file was
   processed (a growing buffer and a copy of it); it now reads them into one array of the exact length and holds them
   once. `Generate` reads them the same way, without a growing buffer.
+- The package carries a short, Markdown-only README, so its page on nuget.org no longer shows raw HTML or broken
+  images.
 
 ### Fixed
 
@@ -144,6 +139,7 @@ First public release.
 - **Dockerfile** for the command-line tool with fontconfig and metric-compatible fonts.
 - Documentation: architecture, formats, options, security, native components, Linux and fonts, command-line tool.
 
+[1.4.0]: https://github.com/nsknet/FastThumb/releases/tag/v1.4.0
 [1.3.0]: https://github.com/nsknet/FastThumb/releases/tag/v1.3.0
 [1.2.0]: https://github.com/nsknet/FastThumb/releases/tag/v1.2.0
 [1.1.0]: https://github.com/nsknet/FastThumb/releases/tag/v1.1.0
