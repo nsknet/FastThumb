@@ -29,7 +29,7 @@ internal readonly record struct DecodeRequest(long MaxPixels, Func<int, int, boo
 /// </summary>
 internal static class ManagedImages
 {
-    private enum Kind { None, Tga, Psd, Eps }
+    private enum Kind { None, Tga, Psd, Eps, Raw }
 
     /// <summary>
     /// A format read here, from its signature (TGA has none: its extension, or the TGA 2.0 footer). <paramref name="d"/> may be
@@ -43,6 +43,7 @@ internal static class ManagedImages
         Kind.Tga => Run(() => TgaDecoder.Decode(data, request)),
         Kind.Psd => Run(() => PsdDecoder.Decode(data, request)),
         Kind.Eps => Run(() => EpsPreview.Decode(data, request)),
+        Kind.Raw => OrTiff(data, () => Run(() => RawPreview.Decode(data, request))),
         _ => null,
     };
 
@@ -52,6 +53,7 @@ internal static class ManagedImages
         Kind.Tga => Run(() => TgaDecoder.Size(data)),
         Kind.Psd => Run(() => PsdDecoder.Size(data)),
         Kind.Eps => Run(() => EpsPreview.Size(data)),
+        Kind.Raw => OrTiff<(int, int)?>(data, () => Run(() => RawPreview.Size(data))),
         _ => null,
     };
 
@@ -59,8 +61,19 @@ internal static class ManagedImages
     {
         if (PsdDecoder.Claims(d)) return Kind.Psd;
         if (EpsPreview.Claims(d, extension)) return Kind.Eps;
+        if (RawPreview.Claims(d, extension)) return Kind.Raw;
         if (TgaDecoder.Claims(d, extension)) return Kind.Tga;
         return Kind.None;
+    }
+
+    /// <summary>
+    /// A RAW file that is a standard TIFF (CR2, NEF, ARW, DNG...) with no JPEG preview is still a TIFF: null, so libvips reads its
+    /// first directory, often a small RGB thumbnail. A RAW with its own signature has nothing else to offer and is refused.
+    /// </summary>
+    private static T? OrTiff<T>(byte[] data, Func<T> read)
+    {
+        try { return read(); }
+        catch (UnsupportedFormatException) when (TiffWalker.IsStandard(data)) { return default; }
     }
 
     /// <summary>A record running past the end, a count that overflows: a damaged file, reported as one.</summary>

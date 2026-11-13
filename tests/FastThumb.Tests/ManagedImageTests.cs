@@ -176,13 +176,13 @@ public class ManagedImageTests
     // ---- EPS -------------------------------------------------------------------------------------
 
     [Fact]
-    public void Eps_shows_the_tiff_of_a_dos_eps() => Assert.Equal(0, Difference(RasterFiles.Eps(RasterFiles.EpsPreview.DosTiff), null, Same));
+    public void Eps_shows_the_tiff_of_a_dos_eps() => Assert.Equal(0, Difference(RasterFiles.Eps(EpsKind.DosTiff), null, Same));
 
     [Fact]
     public void Eps_shows_an_epsi_preview_with_0_as_white()
     {
-        Assert.Equal(0, Difference(RasterFiles.Eps(RasterFiles.EpsPreview.Epsi8), null, Red));
-        Assert.Equal(0, Difference(RasterFiles.Eps(RasterFiles.EpsPreview.Epsi1), null,
+        Assert.Equal(0, Difference(RasterFiles.Eps(EpsKind.Epsi8), null, Red));
+        Assert.Equal(0, Difference(RasterFiles.Eps(EpsKind.Epsi1), null,
             (r, _, _) => r < 128 ? ((byte)0, (byte)0, (byte)0) : ((byte)255, (byte)255, (byte)255)));
     }
 
@@ -190,12 +190,12 @@ public class ManagedImageTests
     [InlineData(false)]
     [InlineData(true)]
     public void Eps_shows_the_illustrator_thumbnail(bool rle) =>
-        Assert.Equal(0, Difference(RasterFiles.Eps(rle ? RasterFiles.EpsPreview.IllustratorRle : RasterFiles.EpsPreview.Illustrator), null, Red));
+        Assert.Equal(0, Difference(RasterFiles.Eps(rle ? EpsKind.IllustratorRle : EpsKind.Illustrator), null, Red));
 
     [Fact]
     public void Eps_without_a_preview_is_refused_but_inspected_from_its_bounding_box()
     {
-        var eps = RasterFiles.Eps(RasterFiles.EpsPreview.None, 300, 150);
+        var eps = RasterFiles.Eps(EpsKind.None, 300, 150);
         Assert.Equal(DocumentFormat.Image, ThumbnailGenerator.DetectFormat(eps, null));
         Assert.Throws<UnsupportedFormatException>(() => Generator.Generate(eps, "drawing.eps"));
         var info = Generator.Inspect(eps);
@@ -222,7 +222,90 @@ public class ManagedImageTests
     [Fact]
     public void Dos_eps_sections_past_the_end_are_damaged()
     {
-        var eps = RasterFiles.Eps(RasterFiles.EpsPreview.DosTiff);
+        var eps = RasterFiles.Eps(EpsKind.DosTiff);
         Assert.Throws<InvalidDocumentException>(() => Generator.Generate(eps[..(eps.Length - 100)], "cut.eps"));
+    }
+
+    // ---- RAW -------------------------------------------------------------------------------------
+
+    public static IEnumerable<object[]> RawKinds => Enum.GetValues<RawKind>().Where(k => k != RawKind.NoPreview).Select(k => new object[] { k });
+
+    [Theory]
+    [MemberData(nameof(RawKinds))]
+    public void Raw_shows_its_largest_jpeg_preview(RawKind kind)
+    {
+        var raw = RasterFiles.Raw(kind);
+        Assert.Equal(DocumentFormat.Image, ThumbnailGenerator.DetectFormat(raw, "photo" + Extension(kind)));
+        using var expected = NetVips.Image.NewFromBuffer(ImageFiles.Jpeg());
+        Assert.Equal(expected.WriteToMemory<byte>(), Pixels(raw, Extension(kind)).Pixels);
+    }
+
+    private static string Extension(RawKind kind) => kind switch
+    {
+        RawKind.NefBigEndian => ".nef",
+        RawKind.NoPreview => ".nef",
+        _ => "." + kind.ToString().ToLowerInvariant(),
+    };
+
+    [Theory]
+    [InlineData(RawKind.Cr2)]
+    [InlineData(RawKind.Dng)]
+    [InlineData(RawKind.Orf)]
+    [InlineData(RawKind.Rw2)]
+    [InlineData(RawKind.Raf)]
+    [InlineData(RawKind.Cr3)]
+    public void Raw_is_told_without_its_extension(RawKind kind)
+    {
+        var raw = RasterFiles.Raw(kind);
+        Assert.Equal(DocumentFormat.Image, ThumbnailGenerator.DetectFormat(raw, null));
+        Assert.Equal((320, 200), (Generator.Inspect(raw).Width, Generator.Inspect(raw).Height));
+        Assert.Equal((200, 125), (Generator.Generate(raw).Find(200)!.Width, Generator.Generate(raw).Find(200)!.Height));
+    }
+
+    [Fact]
+    public void Cr3_is_not_taken_for_a_video() => Assert.False(FormatDetector.IsVideo(RasterFiles.Raw(RawKind.Cr3), ".cr3"));
+
+    [Theory]
+    [InlineData(RawKind.Cr2)]
+    [InlineData(RawKind.NefBigEndian)]
+    [InlineData(RawKind.Cr3)]
+    public void Raw_orientation_turns_the_preview(RawKind kind)
+    {
+        var raw = RasterFiles.Raw(kind, orientation: 6);
+        var full = Generator.Generate(raw, "photo" + Extension(kind)).FullSize!;
+        Assert.Equal((200, 320), (full.Width, full.Height));
+        var info = Generator.Inspect(raw, "photo" + Extension(kind));
+        Assert.Equal((200, 320), (info.Width, info.Height));
+    }
+
+    [Fact]
+    public void Raw_without_a_preview_is_refused() =>
+        Assert.Throws<UnsupportedFormatException>(() => Generator.Generate(RasterFiles.Raw(RawKind.NoPreview), "sensor-only.nef"));
+
+    [Fact]
+    public void A_plain_tiff_named_as_raw_is_still_read_as_tiff()
+    {
+        using var picture = NetVips.Image.NewFromBuffer(ImageFiles.Png());
+        var tiff = picture.WriteToBuffer(".tif");
+        var full = Generator.Generate(tiff, "not-really.nef").FullSize!;
+        Assert.Equal((320, 200), (full.Width, full.Height));
+        Assert.Equal((320, 200), (Generator.Inspect(tiff, "not-really.nef").Width, Generator.Inspect(tiff, "not-really.nef").Height));
+    }
+
+    [Fact]
+    public void Raw_preview_declaring_a_huge_size_is_refused() =>
+        Assert.Throws<ResourceLimitExceededException>(() =>
+            Generator.Generate(RasterFiles.Raw(RawKind.Raf, preview: RasterFiles.JpegDeclaring(65000, 65000)), "huge.raf"));
+
+    [Fact]
+    public void Raw_directories_that_loop_end()
+    {
+        var raw = RasterFiles.Raw(RawKind.Cr2);
+        // the last directory's next-directory offset back to IFD0
+        var ifd0 = BitConverter.ToInt32(raw, 4);
+        var last = ifd0;
+        for (var i = 0; i < 2; i++) last = BitConverter.ToInt32(raw, last + 2 + 12 * BitConverter.ToUInt16(raw, last));
+        BitConverter.TryWriteBytes(raw.AsSpan(last + 2 + 12 * BitConverter.ToUInt16(raw, last)), ifd0);
+        Assert.Equal((320, 200), (Pixels(raw, ".cr2").Width, Pixels(raw, ".cr2").Height));
     }
 }
