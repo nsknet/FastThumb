@@ -7,13 +7,13 @@ namespace FastThumb.Slides;
 internal static class SlideRenderer
 {
     /// <summary>One scene per slide. Shapes are drawn back to front: fill, outline, picture, then text.</summary>
-    public static PagedDocument Render(SlideDeck deck)
+    public static PagedDocument Render(SlideDeck deck, int? maxSlides = null)
     {
         var document = new PagedDocument();
         var text = Paginator.ForBoxes(document);
         // one decoded image per picture: readers share the bytes of a part referenced many times
         var images = new Dictionary<byte[], SKImage?>(ReferenceEqualityComparer.Instance);
-        foreach (var slide in deck.Slides.Take(SlideDeck.MaxSlides))
+        foreach (var slide in deck.Slides.Take(Math.Min(SlideDeck.MaxSlides, maxSlides ?? int.MaxValue)))
         {
             var scene = new PageScene(deck.Width, deck.Height);
             Guard.Check();

@@ -21,9 +21,12 @@ generator are available as `ThumbnailGenerator.Options` and apply to every call.
 
 | Property | Type | Default | Range | Meaning |
 |---|---|---|---|---|
-| `Outputs` | `ThumbnailOutputs` | `All` | at least one flag | What to produce: `Images`, `PreviewPdf` or `All`. |
+| `Outputs` | `ThumbnailOutputs` | `All` | at least one flag | What to produce: any of `Images`, `PreviewPdf`, `Text`, `Placeholder`. |
 | `Sizes` | `IReadOnlyList<int>` | `DefaultSizes`: 2500, 1000, 500, 300, 100 | each 1 to 65500; may be empty if `IncludeFullSize` is set | Longest side, in pixels, of each thumbnail. |
 | `IncludeFullSize` | `bool` | `true` | | Also produce the full-size image. |
+| `Fit` | `ThumbnailFit` | `Contain` | `Contain`, `Cover` | Whole page in the size, or a filled and cropped box. |
+| `AspectRatio` | `double` | 1 | 0.01 to 100 | Width / height of the box for `Fit = Cover`. |
+| `MaxPages` | `int?` | `null` | at least 1, or `null` | Pages laid out, written to the preview PDF and read for text. |
 | `Format` | `ThumbnailFormat` | `Png` | `Png`, `WebP`, `Jpeg` | Encoding of the images. |
 | `Quality` | `int` | 80 | 1 to 100 | WebP and JPEG quality. |
 | `PngCompressionLevel` | `int` | 3 | 0 to 9 | zlib level for PNG. |
@@ -39,9 +42,63 @@ generator are available as `ThumbnailGenerator.Options` and apply to every call.
 - `Images`: the thumbnails (`ThumbnailResult.Images`).
 - `PreviewPdf`: a PDF of every page (`ThumbnailResult.PreviewPdf`). Only paginated documents have one: a PDF, an image
   or a video does not. Requesting only `PreviewPdf` skips rendering and encoding the images.
-- `All`: both.
+- `All`: both. `All` does not include the two flags below, so existing code keeps doing the same work.
+- `Text`: the plain text of each page (`ThumbnailResult.PageTexts` and `ThumbnailResult.Text`). See [Text](#text).
+- `Placeholder`: a ThumbHash and the average colour (`ThumbnailResult.Placeholder`). See [Placeholder](#placeholder).
+
+Combine flags with `|`, for example `ThumbnailOutputs.All | ThumbnailOutputs.Text`. Requesting only `Text` lays the
+document out but draws and encodes nothing; requesting only `Placeholder` draws page 1 at 100 px.
 
 For a PDF, image or video input with `Outputs = PreviewPdf`, the result has no images and no preview PDF.
+
+### Text
+
+With `ThumbnailOutputs.Text`, `ThumbnailResult.PageTexts` holds one string per page, page 1 first, and
+`ThumbnailResult.Text` joins them with a blank line. It is meant for search indexing, previews in a list, or feeding a
+language model, not for round-tripping the document.
+
+```csharp
+var generator = new ThumbnailGenerator(ThumbnailOptions.Default with { Outputs = ThumbnailOutputs.Text });
+var result = generator.GenerateFromFile("contract.docx");
+index.Add(result.Text);
+```
+
+| Input | Where the text comes from |
+|---|---|
+| Document, spreadsheet, presentation, XPS | The laid-out pages: what the preview PDF shows, in reading order. |
+| PDF | PDFium's text layer. A scanned page without one gives an empty string. |
+| Image, video | Nothing: `PageTexts` is empty. |
+
+Lines end with `\n`. A gap of more than a line becomes a blank line. Text far apart on one line, such as spreadsheet
+cells or a tab stop, is separated by a tab. Headers and footers are included, because they are on the page. Text
+clipped by a spreadsheet cell is clipped in the text too. A PDF's text is read from at most 3000 pages unless
+`MaxPages` says otherwise. `PageTexts` is `null` when `Text` was not requested.
+
+### Placeholder
+
+With `ThumbnailOutputs.Placeholder`, `ThumbnailResult.Placeholder` describes page 1, the image or the video frame in a
+few bytes, for a web or mobile UI to show while the real thumbnail loads:
+
+- `ThumbHash` (and `ThumbHashBase64`): about 25 bytes in the [ThumbHash](https://evanw.github.io/thumbhash/) format.
+  Decoders exist for JavaScript, Swift, Kotlin, Rust, Go and others. They return a blurred picture of about 32 px
+  with the right aspect ratio and colours, and transparency when the picture has some.
+- `AverageColor`: the average colour as CSS hex, `"#rrggbb"`, for a plain background.
+
+The placeholder does not depend on `Sizes` or `Format`. It is computed from a copy of at most 100 x 100 px, so it adds
+little time.
+
+```csharp
+var options = ThumbnailOptions.Default with { Sizes = [300], Outputs = ThumbnailOutputs.Images | ThumbnailOutputs.Placeholder };
+var result = new ThumbnailGenerator(options).Generate(upload, fileName);
+await db.SaveAsync(id, result.Find(300)!.Data, result.Placeholder!.ThumbHashBase64, result.Placeholder.AverageColor);
+```
+
+In the browser, with the `thumbhash` npm package:
+
+```js
+import { thumbHashToDataURL } from "thumbhash";
+img.src = thumbHashToDataURL(Uint8Array.from(atob(row.thumbHash), c => c.charCodeAt(0)));
+```
 
 ### Sizes and IncludeFullSize
 
@@ -65,6 +122,37 @@ page is rendered at whatever size is asked for.
 
 At least one image must be requested when `Outputs` includes `Images`: an empty `Sizes` with
 `IncludeFullSize = false` is rejected.
+
+### Fit and AspectRatio
+
+`ThumbnailFit` says how each entry of `Sizes` fills its box:
+
+- `Contain` (default): the whole page or picture; its longest side is the size.
+- `Cover`: exactly a box of `AspectRatio`, filled and cropped, for grids of equal tiles and avatars. The longer side of
+  the box is the size: with `AspectRatio = 16.0 / 9`, size 320 gives 320 x 180; with `0.75`, size 400 gives 300 x 400.
+
+| Input | What `Cover` keeps |
+|---|---|
+| Document, spreadsheet, presentation, XPS, PDF | The top of page 1 (the left edge if the page is wider than the box), where the title is. The page is drawn large enough to fill the box, so the crop is sharp. |
+| Image, video | The centre. |
+
+An image or a video frame is never enlarged: if it cannot fill the box, the result is the largest box of the same
+shape it can fill (a 320 x 200 image with a square size of 300 gives 200 x 200). The full-size image is never cropped.
+
+### MaxPages
+
+`MaxPages` stops a document after that many pages: they are laid out, written to the preview PDF and read for text,
+and the rest is skipped. Thumbnails only need page 1, so `MaxPages = 1` with `Outputs = Images` makes a long document
+much cheaper. The thumbnail of page 1 is identical with or without the limit.
+
+```csharp
+var thumbnailsOnly = ThumbnailOptions.Default with { Outputs = ThumbnailOutputs.Images, MaxPages = 1 };
+```
+
+`ThumbnailResult.HasMorePages` is `true` when pages were left out. For a document, `PageCount` is then the number of
+pages laid out, since the rest was never laid out. A PDF still reports all its pages: PDFium knows the count without
+reading them, and `MaxPages` only limits how many pages are read for text. The built-in limits (3000 pages for a flow
+document, 200 printed pages for a spreadsheet, the slide limit for a presentation, 500 pages for XPS) apply either way.
 
 ### Format
 

@@ -67,7 +67,10 @@ internal sealed class Paginator
         Layout(blocks, box.Left, box.Width, ref y);
     }
 
-    public static PagedDocument Build(IPageSource source, int maxPages = 3000)
+    /// <summary>Built-in page limit of a flow document.</summary>
+    public const int MaxPages = 3000;
+
+    public static PagedDocument Build(IPageSource source, int maxPages = MaxPages)
     {
         var paginator = new Paginator(source, Math.Max(1, maxPages));
         var page = source.Page;

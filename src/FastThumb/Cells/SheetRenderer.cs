@@ -11,8 +11,11 @@ internal static class SheetRenderer
     private const int MaxRow = (1 << 20) - 1, MaxColumn = (1 << 14) - 1;   // Excel's grid, 0-based
     private const long MaxMergedCells = 4 << 20;
 
+    /// <summary>Built-in limit of printed pages per workbook.</summary>
+    public const int MaxPages = 200;
+
     /// <summary>Plans and draws printed pages, sheet after sheet, stopping at <paramref name="maxPages"/>.</summary>
-    public static PagedDocument Render(IReadOnlyList<SheetSnapshot> sheets, int maxPages = 200)
+    public static PagedDocument Render(IReadOnlyList<SheetSnapshot> sheets, int maxPages = MaxPages)
     {
         var document = new PagedDocument();
         var text = Paginator.ForBoxes(document);

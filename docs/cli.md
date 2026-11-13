@@ -48,8 +48,13 @@ their paths. Several inputs can be given. An input that does not exist is a comm
 | Option | Default | Meaning |
 |---|---|---|
 | `-o`, `--out <dir>` | required | Output directory; created if missing. |
-| `-m`, `--mode <what>` | `both` | `images`, `pdf` or `both`. `pdf` is the preview PDF of every page; only documents have one (a PDF, an image or a video does not). |
+| `-m`, `--mode <what>` | `both` | `images`, `pdf`, `both` or `none`. `pdf` is the preview PDF of every page; only documents have one (a PDF, an image or a video does not). `none` is for `--text` or `--placeholder` alone. |
+| `--text` | | Also write the text of every page to `<dir>/<name>.txt`, pages separated by a form feed (`\f`). |
+| `--placeholder` | | Also make a ThumbHash and the average colour; shown with `--json` and `--verbose`. |
+| `--max-pages <n>` | all | Lay out, write and read the text of at most `n` pages. |
 | `-s`, `--sizes <list>` | `full,2500,1000,500,300,100` | Longest side of each image in pixels (1 to 65500), comma separated. `full` is the page at 96 DPI, a PDF page at 72 DPI, an image or a video frame at its own size. Images are never enlarged. |
+| `--fit <how>` | `contain` | `contain`: the whole page, longest side = size. `cover`: fill the box and crop, keeping the top of a page or the centre of a picture. |
+| `--aspect <w:h>` | `1:1` | Shape of the box for `--fit cover`: `16:9`, `3:4`, or a number such as `0.75` (0.01 to 100). |
 | `-f`, `--format <format>` | `png` | `png`, `webp` or `jpeg` (`jpg`). |
 | `-q`, `--quality <1-100>` | `80` | WebP and JPEG quality. |
 | `--png-compression <0-9>` | `3` | zlib level for PNG; lower is faster and larger. |
@@ -72,6 +77,7 @@ names that start with `-` can be passed. The sizes are processed largest first, 
 ```text
 <dir>/<name>.<size>.<png|webp|jpg>
 <dir>/<name>.preview.pdf
+<dir>/<name>.txt                      with --text
 ```
 
 - `<name>` is the path of the file below the input directory with `/` replaced by `__` (so
@@ -88,8 +94,8 @@ comparison ignores case.
 Each output is written to a temporary file next to its target and then renamed over it, so an interrupted run never
 leaves a truncated output that `--skip-existing` would take for a finished one.
 
-With `--skip-existing`, a file is skipped when every requested image exists and, if a preview PDF is requested and
-the format has one, the preview PDF exists.
+With `--skip-existing`, a file is skipped when every requested image exists, the text file exists if `--text` is
+given, and, if a preview PDF is requested and the format has one, the preview PDF exists.
 
 ### Console output
 
@@ -129,6 +135,9 @@ With `--json`, each processed file produces one line on standard output:
 | `bytes` | number | Total size of the images written. |
 | `images` | number | Number of images written. |
 | `pdfBytes` | number | Size of the preview PDF, 0 if none. |
+| `textBytes` | number | Size of the text file, with `--text`. Absent when there is no text. |
+| `morePages` | boolean | `true` when `--max-pages` left pages out. Absent otherwise. |
+| `placeholder` | object | With `--placeholder`: `thumbHash` (Base64) and `color` (`"#rrggbb"`). |
 | `timings` | object | `render`, `pdf` and `images` in milliseconds (one decimal): the library's `ThumbnailTimings`. Absent for errors and for files skipped by `--skip-existing`. |
 | `error` | string | Exception type and message, only when `status` is `error`. |
 | `note` | string | Why the file was skipped, only when `status` is `skipped`. |
@@ -165,6 +174,18 @@ fastthumb run in/ -o out --json > run.jsonl
 
 ```bash
 fastthumb run in/ -o out --skip-existing -j 8 --no-parallel-encode --quiet
+```
+
+Text of every document for a search index, with no images:
+
+```bash
+fastthumb run in/ -o out -m none --text -j 4
+```
+
+Square 300 px tiles of page 1 only, with placeholders in the JSON lines:
+
+```bash
+fastthumb run in/ -o out -m images -s 300 --fit cover --max-pages 1 --placeholder --json > tiles.jsonl
 ```
 
 ## `info`

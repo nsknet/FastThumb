@@ -5,6 +5,27 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-11-13
+
+### Added
+
+- **Text**: `ThumbnailOutputs.Text` returns the plain text of every page (`ThumbnailResult.PageTexts` and `Text`), for
+  search indexing. Documents, spreadsheets, presentations and XPS give the text of the laid-out pages; a PDF gives its
+  text layer through PDFium.
+- **Cover thumbnails**: `ThumbnailOptions.Fit = ThumbnailFit.Cover` fills a box of `AspectRatio` (square by default)
+  and crops it, keeping the top of a page or the centre of a picture. Images are still never enlarged.
+- **Placeholders**: `ThumbnailOutputs.Placeholder` returns a ThumbHash of about 25 bytes and the average colour
+  (`ThumbnailResult.Placeholder`), to show while the thumbnail loads.
+- **Page limit**: `ThumbnailOptions.MaxPages` stops the layout, the preview PDF and the text after that many pages;
+  `ThumbnailResult.HasMorePages` tells whether pages were left out. `MaxPages = 1` makes thumbnails of long documents
+  cheaper.
+- Command-line tool: `--text`, `--placeholder`, `--max-pages`, `--fit`, `--aspect` and `--mode none`.
+
+### Changed
+
+- `ThumbnailOutputs.All` still means images and preview PDF; the new flags are added to it with `|`. Code that used
+  the value 4 as an invalid flag now gets `Text`.
+
 ## [1.1.0] - 2026-11-13
 
 ### Changed
@@ -67,5 +88,6 @@ First public release.
 - **Dockerfile** for the command-line tool with fontconfig and metric-compatible fonts.
 - Documentation: architecture, formats, options, security, native components, Linux and fonts, command-line tool.
 
+[1.2.0]: https://github.com/nsknet/FastThumb/releases/tag/v1.2.0
 [1.1.0]: https://github.com/nsknet/FastThumb/releases/tag/v1.1.0
 [1.0.0]: https://github.com/nsknet/FastThumb/releases/tag/v1.0.0

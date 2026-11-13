@@ -27,7 +27,7 @@ public class OptionsTests
         yield return Case("max input bytes over 2 GiB", d with { Limits = new ResourceLimits { MaxInputBytes = 3L << 30 } });
         yield return Case("limits null", d with { Limits = null! });
         yield return Case("outputs none", d with { Outputs = 0 });
-        yield return Case("outputs unknown flag", d with { Outputs = (ThumbnailOutputs)4 });
+        yield return Case("outputs unknown flag", d with { Outputs = (ThumbnailOutputs)16 });
         yield return Case("no image requested", d with { Sizes = [], IncludeFullSize = false });
     }
 

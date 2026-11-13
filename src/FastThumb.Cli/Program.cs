@@ -86,12 +86,14 @@ sealed record RunSettings(
                 case "-m" or "--mode":
                     options = options with
                     {
-                        Outputs = Value().ToLowerInvariant() switch
+                        // --text and --placeholder add to the mode, whichever comes first
+                        Outputs = (options.Outputs & ~ThumbnailOutputs.All) | Value().ToLowerInvariant() switch
                         {
                             "images" or "image" => ThumbnailOutputs.Images,
                             "pdf" => ThumbnailOutputs.PreviewPdf,
                             "both" or "all" => ThumbnailOutputs.All,
-                            var other => throw new UsageException($"option --mode: '{other}' is not images, pdf or both"),
+                            "none" => 0,
+                            var other => throw new UsageException($"option --mode: '{other}' is not images, pdf, both or none"),
                         },
                     };
                     break;
@@ -111,6 +113,21 @@ sealed record RunSettings(
                         },
                     };
                     break;
+                case "--fit":
+                    options = options with
+                    {
+                        Fit = Value().ToLowerInvariant() switch
+                        {
+                            "contain" => ThumbnailFit.Contain,
+                            "cover" => ThumbnailFit.Cover,
+                            var other => throw new UsageException($"option --fit: '{other}' is not contain or cover"),
+                        },
+                    };
+                    break;
+                case "--aspect": options = options with { AspectRatio = ParseAspect(name, Value()) }; break;
+                case "--max-pages": options = options with { MaxPages = Int(1, int.MaxValue) }; break;
+                case "--text": options = options with { Outputs = options.Outputs | ThumbnailOutputs.Text }; break;
+                case "--placeholder": options = options with { Outputs = options.Outputs | ThumbnailOutputs.Placeholder }; break;
                 case "-q" or "--quality": options = options with { Quality = Int(1, 100) }; break;
                 case "--png-compression": options = options with { PngCompressionLevel = Int(0, 9) }; break;
                 case "--video-position": options = options with { Video = options.Video with { Position = Number(0, 1) } }; break;
@@ -154,6 +171,19 @@ sealed record RunSettings(
     }
 
     /// <summary>"full,2500,1000" → sizes [2500, 1000] + full; "none" → no thumbnail size (only "full", if listed).</summary>
+    /// <summary>"16:9", "1:1" or a plain number: width divided by height.</summary>
+    private static double ParseAspect(string name, string text)
+    {
+        var parts = text.Split(':');
+        double value = double.NaN;
+        if (parts.Length == 1) double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out value);
+        else if (parts.Length == 2
+            && double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var width)
+            && double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var height) && height > 0)
+            value = width / height;
+        return value is >= 0.01 and <= 100 ? value : throw new UsageException($"option {name}: '{text}' is not a ratio like 16:9 between 0.01 and 100");
+    }
+
     private static (IReadOnlyList<int>, bool) ParseSizes(string text)
     {
         var sizes = new List<int>();
@@ -171,7 +201,8 @@ sealed record RunSettings(
 }
 
 /// <summary>What happened to one input file.</summary>
-sealed record FileResult(string Name, string Status, DocumentFormat? Format, int Pages, int Images, long ImageBytes, long PdfBytes, double Ms, ThumbnailTimings? Timings, string? Message);
+sealed record FileResult(string Name, string Status, DocumentFormat? Format, int Pages, int Images, long ImageBytes, long PdfBytes, double Ms,
+    ThumbnailTimings? Timings, string? Message, long TextBytes = 0, ThumbnailPlaceholder? Placeholder = null, bool MorePages = false);
 
 static class Cli
 {
@@ -201,13 +232,21 @@ static class Cli
 
             Options for run:
               -o, --out <dir>              output directory, created if missing                 (required)
-              -m, --mode <what>            images | pdf | both                                     [both]
+              -m, --mode <what>            images | pdf | both | none                              [both]
                                            pdf = preview PDF of every page; documents only (a PDF,
                                            an image or a video has none)
+                  --text                   also write the text of every page to <dir>/<name>.txt
+                                           (pages separated by a form feed)
+                  --placeholder            also make a ThumbHash and average colour (shown with
+                                           --json and --verbose)
+                  --max-pages <n>          lay out, write and read at most n pages             [all]
               -s, --sizes <list>           long side of each image in px, comma separated; "full" is
                                            the page at 96 DPI, a PDF page at 72 DPI, an image or video
                                            at its own size; images are never enlarged
                                                                                    [full,2500,1000,500,300,100]
+                  --fit <how>              contain: whole page, long side = size; cover: fill
+                                           the box and crop (top of a page, centre of a picture)  [contain]
+                  --aspect <w:h>           box shape for --fit cover, e.g. 1:1, 16:9, 0.75        [1:1]
               -f, --format <format>        png | webp | jpeg                                       [png]
               -q, --quality <1-100>        webp / jpeg quality                                     [80]
                   --png-compression <0-9>  zlib level; lower is faster and larger                  [3]
@@ -230,6 +269,8 @@ static class Cli
               fastthumb run in/ -o out -m images -s 1000,300 -f webp -q 75 -j 4
               fastthumb run in/ -o out -m pdf -i docx,doc,xlsx,pptx
               fastthumb run in/ -o out --json > run.jsonl
+              fastthumb run in/ -o out -m none --text --max-pages 50
+              fastthumb run photos/ -o out -m images -s 300 --fit cover --placeholder --json
             """);
         return 0;
     }
@@ -296,7 +337,11 @@ static class Cli
 
         if (!run.Json && !run.Quiet)
         {
-            var what = o.Outputs switch { ThumbnailOutputs.Images => "images", ThumbnailOutputs.PreviewPdf => "preview PDF", _ => "images + preview PDF" };
+            var what = (o.Outputs & ThumbnailOutputs.All) switch { ThumbnailOutputs.Images => "images", ThumbnailOutputs.PreviewPdf => "preview PDF", 0 => "", _ => "images + preview PDF" };
+            if ((o.Outputs & ThumbnailOutputs.Text) != 0) what = what.Length == 0 ? "text" : what + " + text";
+            if ((o.Outputs & ThumbnailOutputs.Placeholder) != 0) what = what.Length == 0 ? "placeholder" : what + " + placeholder";
+            if (o.Fit == ThumbnailFit.Cover) what += $", cover {o.AspectRatio.ToString("0.###", CultureInfo.InvariantCulture)}:1";
+            if (o.MaxPages is { } maxPages) what += $", at most {Plural(maxPages, "page")}";
             var sizes = string.Join(",", (o.IncludeFullSize ? new[] { "full" } : []).Concat(o.Sizes.Select(s => s.ToString(CultureInfo.InvariantCulture))));
             var format = o.Format == ThumbnailFormat.Png ? $"png (compression {o.PngCompressionLevel})" : $"{o.FileExtension} (quality {o.Quality})";
             Console.WriteLine($"fastthumb {Version(typeof(Cli).Assembly)} · .NET {Environment.Version} · {RuntimeInformation.RuntimeIdentifier}");
@@ -335,13 +380,16 @@ static class Cli
         var wantPdf = (o.Outputs & ThumbnailOutputs.PreviewPdf) != 0;
         string ImagePath(string size, string? extension = null) => Path.Combine(run.OutDir, $"{name}.{size}.{extension ?? o.FileExtension}");
         var pdfPath = Path.Combine(run.OutDir, $"{name}.preview.pdf");
+        var wantText = (o.Outputs & ThumbnailOutputs.Text) != 0;
+        var textPath = Path.Combine(run.OutDir, $"{name}.txt");
 
         if (run.SkipExisting)
         {
             var names = (o.IncludeFullSize ? new[] { "full" } : []).Concat(o.Sizes.Select(s => s.ToString(CultureInfo.InvariantCulture)));
             var imagesThere = !wantImages || names.All(n => File.Exists(ImagePath(n)));
             var pdfThere = !wantPdf || File.Exists(pdfPath) || !HasPreviewPdf(path);
-            if (imagesThere && pdfThere) return new FileResult(name, "skipped", null, 0, 0, 0, 0, 0, null, "outputs already there");
+            var textThere = !wantText || File.Exists(textPath);
+            if (imagesThere && pdfThere && textThere) return new FileResult(name, "skipped", null, 0, 0, 0, 0, 0, null, "outputs already there");
         }
 
         var clock = Stopwatch.StartNew();
@@ -361,9 +409,16 @@ static class Cli
                 WriteFile(pdfPath, set.PreviewPdf);
                 pdfBytes = set.PreviewPdf.Length;
             }
-            var nothing = set.Images.Count == 0 && set.PreviewPdf == null;
+            long textBytes = 0;
+            if (set.PageTexts is { } pages)
+            {
+                var text = System.Text.Encoding.UTF8.GetBytes(string.Join('\f', pages));
+                WriteFile(textPath, text);
+                textBytes = text.Length;
+            }
+            var nothing = set.Images.Count == 0 && set.PreviewPdf == null && set.PageTexts == null && set.Placeholder == null;
             return new FileResult(name, nothing ? "skipped" : "ok", set.Format, set.PageCount, set.Images.Count, imageBytes, pdfBytes,
-                clock.Elapsed.TotalMilliseconds, set.Timings, nothing ? $"no preview PDF for {set.Format}" : null);
+                clock.Elapsed.TotalMilliseconds, set.Timings, nothing ? $"no preview PDF for {set.Format}" : null, textBytes, set.Placeholder, set.HasMorePages);
         }
         catch (Exception e)
         {
@@ -416,6 +471,9 @@ static class Cli
                 bytes = r.ImageBytes,
                 images = r.Images,
                 pdfBytes = r.PdfBytes,
+                textBytes = r.TextBytes > 0 ? r.TextBytes : (long?)null,
+                morePages = r.MorePages ? true : (bool?)null,
+                placeholder = r.Placeholder is { } p ? new { thumbHash = p.ThumbHashBase64, color = p.AverageColor } : null,
                 timings = r.Timings == null ? null : new { render = Math.Round(r.Timings.Value.Render.TotalMilliseconds, 1), pdf = Math.Round(r.Timings.Value.PreviewPdf.TotalMilliseconds, 1), images = Math.Round(r.Timings.Value.Encode.TotalMilliseconds, 1) },
                 error = r.Status == "error" ? r.Message : null,
                 note = r.Status == "skipped" ? r.Message : null,
@@ -432,6 +490,9 @@ static class Cli
             line += $"{r.Format,-6} {Plural(r.Pages, "page"),9} {Ms(r.Ms),8}";
             if (r.Images > 0) line += $"   {r.Images} img {Size(r.ImageBytes),8}";
             if (r.PdfBytes > 0) line += $"   pdf {Size(r.PdfBytes),8}";
+            if (r.TextBytes > 0) line += $"   txt {Size(r.TextBytes),8}";
+            if (r.MorePages) line += "   (more pages)";
+            if (run.Verbose && r.Placeholder is { } placeholder) line += $"   {placeholder}";
             if (run.Verbose && r.Timings is { } t)
                 line += Paint($"   [render {Ms(t.Render.TotalMilliseconds)} · pdf {Ms(t.PreviewPdf.TotalMilliseconds)} · images {Ms(t.Encode.TotalMilliseconds)}]", "90", run.Color);
         }

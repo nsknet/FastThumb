@@ -53,29 +53,39 @@ internal static class Thumbnailer
         }
 
         var clock = Stopwatch.StartNew();
-        var wantImages = (options.Outputs & ThumbnailOutputs.Images) != 0;
-        var wantPdf = (options.Outputs & ThumbnailOutputs.PreviewPdf) != 0;
+        var want = new Wanted(options);
         var images = new List<Thumbnail>();
         if (format == DocumentFormat.Image)
         {
-            if (!wantImages) return new ThumbnailResult(format, 1, images, null, default);
-            using (var original = Decode(data, options.Limits.MaxPixels)) EncodeImage(original, images, options);
-            return new ThumbnailResult(format, 1, images, null, new(TimeSpan.Zero, TimeSpan.Zero, clock.Elapsed));
+            if (!want.Picture) return Finish(new ThumbnailResult(format, 1, images, null, default), want, null);
+            ThumbnailPlaceholder? placeholder;
+            using (var original = Decode(data, options.Limits.MaxPixels)) placeholder = EncodeImage(original, images, options, want);
+            return Finish(new ThumbnailResult(format, 1, images, null, new(TimeSpan.Zero, TimeSpan.Zero, clock.Elapsed)), want, placeholder);
         }
 
         if (format == DocumentFormat.Pdf)
         {
-            if (!wantImages) return new ThumbnailResult(format, Pdfium.PageCount(data), images, null, default);
+            List<string>? texts = null;
+            var count = 0;
+            if (want.Text) texts = Pdfium.PageTexts(data, options.MaxPages ?? DefaultMaxTextPages, out count);
+            bool More() => (options.MaxPages is { } max && count > max) || (texts != null && count > texts.Count);
+            if (!want.Picture)
+            {
+                if (texts == null) count = Pdfium.PageCount(data);
+                return Finish(new ThumbnailResult(format, count, images, null, new(Lap(clock), TimeSpan.Zero, TimeSpan.Zero)), want, null, texts, More());
+            }
             // with no size, page 1 is rendered at its own size (72 DPI), which is the full size
-            using var page = Pdfium.RenderPage(data, 0, options.Sizes.Count > 0 ? options.Sizes.Max() : 0, options.Limits.MaxPixels,
-                out var width, out var height, out var count);
+            var longSide = !want.Images ? PlaceholderSide
+                : options.Fit == ThumbnailFit.Cover && options.Sizes.Count > 0 ? MasterSide(Pdfium.FirstPageSize(data), options)
+                : options.Sizes.Count > 0 ? options.Sizes.Max() : 0;
+            using var bitmap = Pdfium.RenderPage(data, 0, longSide, options.Limits.MaxPixels, out var width, out var height, out count);
             var render = Lap(clock);
             (width, height) = Fit(width, height, options.Limits.MaxPixels);
-            EncodeBitmap(page, width, height, images, options);
-            return new ThumbnailResult(format, count, images, null, new(render, TimeSpan.Zero, Lap(clock)));
+            var placeholder = EncodeBitmap(bitmap, width, height, images, options, want, cropTop: true);
+            return Finish(new ThumbnailResult(format, count, images, null, new(render, TimeSpan.Zero, Lap(clock))), want, placeholder, texts, More());
         }
 
-        try { return CreateDocument(data, format, options, images, clock, wantImages, wantPdf); }
+        try { return CreateDocument(data, format, options, images, clock, want); }
         // a damaged document surfaces from the readers as whatever the broken field tripped over (an index, a number, XML
         // syntax); callers get one type for "bad file", and ArgumentException keeps meaning "bad options"
         catch (Exception e) when (e is IndexOutOfRangeException or ArgumentException or System.Xml.XmlException or FormatException
@@ -85,41 +95,97 @@ internal static class Thumbnailer
         }
     }
 
-    private static ThumbnailResult CreateDocument(byte[] data, DocumentFormat format, ThumbnailOptions options, List<Thumbnail> images,
-        Stopwatch clock, bool wantImages, bool wantPdf)
+    /// <summary>Pages of a PDF read for text when <see cref="ThumbnailOptions.MaxPages"/> is not set (the layout limit of documents).</summary>
+    private const int DefaultMaxTextPages = 3000;
+
+    /// <summary>Long side of the picture a placeholder is made from: ThumbHash takes at most 100 x 100 px.</summary>
+    private const int PlaceholderSide = 100;
+
+    /// <summary>The requested outputs of one call.</summary>
+    private readonly struct Wanted(ThumbnailOptions options)
     {
-        using var document = Layout(data, format);
+        public bool Images { get; } = (options.Outputs & ThumbnailOutputs.Images) != 0;
+        public bool Pdf { get; } = (options.Outputs & ThumbnailOutputs.PreviewPdf) != 0;
+        public bool Text { get; } = (options.Outputs & ThumbnailOutputs.Text) != 0;
+        public bool Placeholder { get; } = (options.Outputs & ThumbnailOutputs.Placeholder) != 0;
+
+        /// <summary>Page 1, the image or the frame has to be decoded or drawn.</summary>
+        public bool Picture => Images || Placeholder;
+    }
+
+    private static ThumbnailResult Finish(ThumbnailResult result, Wanted want, ThumbnailPlaceholder? placeholder,
+        IReadOnlyList<string>? texts = null, bool hasMorePages = false) =>
+        result.With(want.Text ? texts ?? [] : null, placeholder, hasMorePages);
+
+    private static ThumbnailResult CreateDocument(byte[] data, DocumentFormat format, ThumbnailOptions options, List<Thumbnail> images,
+        Stopwatch clock, Wanted want)
+    {
+        using var document = Layout(data, format, options.MaxPages, out var more);
         var first = document.Pages[0];
         TimeSpan render, pdfTime = TimeSpan.Zero, encode = TimeSpan.Zero;
         SKBitmap? master = null;
+        ThumbnailPlaceholder? placeholder = null;
         try
         {
-            if (wantImages)
+            if (want.Picture)
             {
                 // the full size is the page at 96 DPI, the usual screen resolution for office documents
                 // (page sizes come from the file: within MaxPixels, and the master too)
                 var maxPixels = options.Limits.MaxPixels;
                 var (fullWidth, fullHeight) = Fit(first.Width * 96.0 / 72, first.Height * 96.0 / 72, maxPixels);
-                var longSide = options.Sizes.Count > 0 ? options.Sizes.Max() : Math.Max(fullWidth, fullHeight);
+                var longSide = !want.Images ? PlaceholderSide
+                    : options.Sizes.Count > 0 ? MasterSide(first.Width, first.Height, options) : Math.Max(fullWidth, fullHeight);
                 var (masterWidth, masterHeight) = Fit((double)first.Width * longSide / Math.Max(first.Width, first.Height),
                     (double)first.Height * longSide / Math.Max(first.Width, first.Height), maxPixels);
                 master = first.ToBitmap(Math.Max(masterWidth, masterHeight));
                 render = Lap(clock);
-                EncodeBitmap(master, fullWidth, fullHeight, images, options);
+                placeholder = EncodeBitmap(master, fullWidth, fullHeight, images, options, want, cropTop: true);
                 encode = Lap(clock);
             }
             else render = Lap(clock);
             byte[]? pdf = null;
-            if (wantPdf)
+            if (want.Pdf)
             {
                 Guard.Check();
                 pdf = document.ToPdf();
                 pdfTime = Lap(clock);
             }
-            return new ThumbnailResult(format, document.Pages.Count, images, pdf, new(render, pdfTime, encode));
+            List<string>? texts = null;
+            if (want.Text)
+            {
+                texts = new List<string>(document.Pages.Count);
+                foreach (var page in document.Pages) texts.Add(PageText.Read(page));
+                render += Lap(clock);
+            }
+            return Finish(new ThumbnailResult(format, document.Pages.Count, images, pdf, new(render, pdfTime, encode)), want, placeholder, texts, more);
         }
         finally { master?.Dispose(); }
     }
+
+    /// <summary>
+    /// Long side of page 1 when it is drawn: enough for the largest size, and for <see cref="ThumbnailFit.Cover"/> enough that
+    /// the page covers the whole box (a portrait page in a square box is drawn taller than the size).
+    /// </summary>
+    private static int MasterSide((double Width, double Height) page, ThumbnailOptions options) => MasterSide(page.Width, page.Height, options);
+
+    private static int MasterSide(double pageWidth, double pageHeight, ThumbnailOptions options)
+    {
+        if (options.Sizes.Count == 0) return 0;
+        if (options.Fit != ThumbnailFit.Cover) return options.Sizes.Max();
+        double longest = 0;
+        foreach (var size in options.Sizes)
+        {
+            var (boxWidth, boxHeight) = CoverBox(size, options.AspectRatio);
+            var scale = Math.Max(boxWidth / pageWidth, boxHeight / pageHeight);
+            longest = Math.Max(longest, scale * Math.Max(pageWidth, pageHeight));
+        }
+        return (int)Math.Min(65500, Math.Ceiling(longest));
+    }
+
+    /// <summary>The box of one size for <see cref="ThumbnailFit.Cover"/>: its longer side is the size.</summary>
+    private static (int Width, int Height) CoverBox(int size, double aspectRatio) => aspectRatio >= 1
+        ? (size, Math.Max(1, (int)Math.Round(size / aspectRatio)))
+        : (Math.Max(1, (int)Math.Round(size * aspectRatio)), size);
 
     /// <summary>
     /// Same as the byte[] overload, from a stream. A seekable video is read in place (only its header and the frame that is
@@ -166,23 +232,40 @@ internal static class Thumbnailer
     private static ThumbnailResult CreateVideo(Stream stream, ThumbnailOptions options)
     {
         var images = new List<Thumbnail>();
-        if ((options.Outputs & ThumbnailOutputs.Images) == 0) return new ThumbnailResult(DocumentFormat.Video, 1, images, null, default);
+        var want = new Wanted(options);
+        if (!want.Picture) return Finish(new ThumbnailResult(DocumentFormat.Video, 1, images, null, default), want, null);
         var clock = Stopwatch.StartNew();
         using var frame = Video.VideoFrame.Grab(stream, out _, options.Video.Position, (int)Math.Min(int.MaxValue, options.Video.Timeout.TotalMilliseconds));
         var grab = Lap(clock);
-        EncodeImage(frame, images, options);
-        return new ThumbnailResult(DocumentFormat.Video, 1, images, null, new(grab, TimeSpan.Zero, Lap(clock)));
+        var placeholder = EncodeImage(frame, images, options, want);
+        return Finish(new ThumbnailResult(DocumentFormat.Video, 1, images, null, new(grab, TimeSpan.Zero, Lap(clock))), want, placeholder);
     }
 
     /// <summary>Lays a document out into pages: flow documents are paginated, slides and sheets have their own renderers.</summary>
-    public static PagedDocument Layout(byte[] data, DocumentFormat format)
+    public static PagedDocument Layout(byte[] data, DocumentFormat format) => Layout(data, format, null, out _);
+
+    /// <summary>
+    /// Same, stopping after <paramref name="maxPages"/> pages. One page more is laid out to learn whether the document goes on
+    /// (<paramref name="more"/>), then dropped. Without a limit only the built-in ones apply and <paramref name="more"/> is false.
+    /// </summary>
+    public static PagedDocument Layout(byte[] data, DocumentFormat format, int? maxPages, out bool more)
     {
-        if (format == DocumentFormat.Xps) return Fixed.XpsReader.Read(data);
-        if (FormatDetector.IsSlides(format)) return SlideRenderer.Render(FormatDetector.OpenDeck(data, format));
-        if (FormatDetector.IsSheets(format)) return SheetRenderer.Render(FormatDetector.OpenSheets(data, format));
-        var reader = FormatDetector.Open(data, format);
-        try { return Paginator.Build(reader); }
-        finally { (reader as IDisposable)?.Dispose(); }
+        var limit = maxPages is { } max ? (int)Math.Min(int.MaxValue, max + 1L) : (int?)null;
+        PagedDocument document;
+        if (format == DocumentFormat.Xps) document = Fixed.XpsReader.Read(data, limit);
+        else if (FormatDetector.IsSlides(format)) document = SlideRenderer.Render(FormatDetector.OpenDeck(data, format), limit);
+        else if (FormatDetector.IsSheets(format))
+            document = limit is { } pages ? SheetRenderer.Render(FormatDetector.OpenSheets(data, format), Math.Min(pages, SheetRenderer.MaxPages))
+                : SheetRenderer.Render(FormatDetector.OpenSheets(data, format));
+        else
+        {
+            var reader = FormatDetector.Open(data, format);
+            try { document = limit is { } pages ? Paginator.Build(reader, Math.Min(pages, Paginator.MaxPages)) : Paginator.Build(reader); }
+            finally { (reader as IDisposable)?.Dispose(); }
+        }
+        more = maxPages is { } kept && document.Pages.Count > kept;
+        if (more) document.Pages.RemoveRange(maxPages!.Value, document.Pages.Count - maxPages.Value);
+        return document;
     }
 
     private static TimeSpan Lap(Stopwatch clock)
@@ -282,50 +365,104 @@ internal static class Thumbnailer
         }
     }
 
-    /// <summary>Thumbnail set from a rendered page: the master itself, the "full" size and the smaller boxes.</summary>
-    private static void EncodeBitmap(SKBitmap master, int fullWidth, int fullHeight, List<Thumbnail> images, ThumbnailOptions options)
+    /// <summary>
+    /// Thumbnail set from a rendered page: the master itself, the "full" size and the smaller boxes; with
+    /// <see cref="ThumbnailFit.Cover"/> each box is filled and cropped from the top of the page.
+    /// </summary>
+    /// <returns>The placeholder, if requested.</returns>
+    private static ThumbnailPlaceholder? EncodeBitmap(SKBitmap master, int fullWidth, int fullHeight, List<Thumbnail> images, ThumbnailOptions options,
+        Wanted want, bool cropTop)
     {
         // wrap the BGRA pixels without copying, reorder to RGB (alpha is always opaque here), keep them in memory once
         using var bgra = NetVips.Image.NewFromMemory(master.GetPixels(), (ulong)master.ByteCount, master.Width, master.Height, 4, NetVips.Enums.BandFormat.Uchar);
         using var rgb = bgra[2].Bandjoin(bgra[1], bgra[0]).Copy(interpretation: NetVips.Enums.Interpretation.Srgb);
         using var cached = rgb.CopyMemory();
+        var placeholder = want.Placeholder ? Placeholder(cached) : null;
+        if (!want.Images) return placeholder;
 
         var wanted = new List<(int?, object)>();
         if (options.IncludeFullSize) wanted.Add((null, (Math.Max(1, fullWidth), Math.Max(1, fullHeight))));
         foreach (var box in options.Sizes)
         {
+            if (options.Fit == ThumbnailFit.Cover) { wanted.Add((box, new Cover(CoverBox(box, options.AspectRatio)))); continue; }
             var ratio = (double)box / Math.Max(master.Width, master.Height);
             wanted.Add((box, (Math.Max(1, (int)Math.Round(master.Width * ratio)), Math.Max(1, (int)Math.Round(master.Height * ratio)))));
         }
         Encode(wanted, key =>
         {
+            if (key is Cover cover)
+            {
+                using var cropped = cached.ThumbnailImage(cover.Box.Width, height: cover.Box.Height,
+                    crop: cropTop ? NetVips.Enums.Interesting.Low : NetVips.Enums.Interesting.Centre);
+                return Save(cropped, options);
+            }
             var (width, height) = ((int, int))key;
             if (width == cached.Width && height == cached.Height) return Save(cached, options);
             using var resized = cached.ThumbnailImage(width, height: height, size: NetVips.Enums.Size.Force);
             return Save(resized, options);
         }, images, options.EncodeInParallel);
+        return placeholder;
     }
+
+    /// <summary>A <see cref="ThumbnailFit.Cover"/> box (a distinct key type, so it is never mistaken for a plain size).</summary>
+    private readonly record struct Cover((int Width, int Height) Box);
 
     /// <summary>
     /// Image files (and video frames) never touch the document renderer: libvips decodes the file once, applies EXIF orientation,
     /// and each size is cut from that copy ("full" needs every pixel anyway). Nothing is enlarged beyond the original.
     /// </summary>
-    private static void EncodeImage(NetVips.Image original, List<Thumbnail> images, ThumbnailOptions options)
+    /// <returns>The placeholder, if requested.</returns>
+    private static ThumbnailPlaceholder? EncodeImage(NetVips.Image original, List<Thumbnail> images, ThumbnailOptions options, Wanted want)
     {
         CheckPixels(original.Width, original.Height, options.Limits.MaxPixels);   // video frames come here straight from the decoder
         using var upright = original.Autorot();
         using var cached = upright.CopyMemory();
+        var placeholder = want.Placeholder ? Placeholder(cached) : null;
+        if (!want.Images) return placeholder;
+
         var side = Math.Max(cached.Width, cached.Height);
         var wanted = new List<(int?, object)>();
         if (options.IncludeFullSize) wanted.Add((null, 0));
-        foreach (var box in options.Sizes) wanted.Add((box, side <= box ? 0 : box));   // 0 = the original
+        foreach (var box in options.Sizes)
+        {
+            if (options.Fit != ThumbnailFit.Cover) { wanted.Add((box, side <= box ? 0 : box)); continue; }
+            // never enlarged: a picture smaller than the box gives the largest box of the same shape that it fills
+            var (boxWidth, boxHeight) = CoverBox(box, options.AspectRatio);
+            var scale = Math.Max((double)boxWidth / cached.Width, (double)boxHeight / cached.Height);
+            if (scale > 1) (boxWidth, boxHeight) = (Math.Max(1, (int)(boxWidth / scale)), Math.Max(1, (int)(boxHeight / scale)));
+            wanted.Add((box, boxWidth == cached.Width && boxHeight == cached.Height ? 0 : new Cover((boxWidth, boxHeight))));
+        }
         Encode(wanted, key =>
         {
+            if (key is Cover cover)
+            {
+                using var cropped = cached.ThumbnailImage(cover.Box.Width, height: cover.Box.Height, crop: NetVips.Enums.Interesting.Centre);
+                return Save(cropped, options);
+            }
             var box = (int)key;
             if (box == 0) return Save(cached, options);
             using var thumbnail = cached.ThumbnailImage(box, height: box, size: NetVips.Enums.Size.Down);
             return Save(thumbnail, options);
         }, images, options.EncodeInParallel);
+        return placeholder;
+    }
+
+    /// <summary>ThumbHash and average colour of a picture, from a copy of at most 100 x 100 px in 8-bit sRGB with alpha.</summary>
+    private static ThumbnailPlaceholder Placeholder(NetVips.Image picture)
+    {
+        Guard.Check();
+        using var small = picture.ThumbnailImage(PlaceholderSide, height: PlaceholderSide, size: NetVips.Enums.Size.Down);
+        using var srgb = small.Interpretation == NetVips.Enums.Interpretation.Srgb ? small.Copy() : small.Colourspace(NetVips.Enums.Interpretation.Srgb);
+        using var bytes = srgb.Format == NetVips.Enums.BandFormat.Uchar ? srgb.Copy() : srgb.Cast(NetVips.Enums.BandFormat.Uchar);
+        using var rgba = bytes.Bands switch
+        {
+            1 => bytes.Bandjoin(bytes, bytes, 255),
+            2 => bytes[0].Bandjoin(bytes[0], bytes[0], bytes[1]),
+            3 => bytes.Bandjoin(255),
+            4 => bytes.Copy(),
+            _ => bytes.ExtractBand(0, n: 4),
+        };
+        return ThumbHash.Encode(rgba.Width, rgba.Height, rgba.WriteToMemory<byte>());
     }
 
     /// <summary>A read-only view of a seekable stream from a given offset on, so a video can start mid-stream.</summary>

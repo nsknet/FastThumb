@@ -20,14 +20,14 @@ internal static class XpsReader
     private const int MaxCluster = 64;
     private static readonly XNamespace Xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
 
-    public static PagedDocument Read(byte[] data)
+    public static PagedDocument Read(byte[] data, int? maxPages = null)
     {
         using var zip = new ZipArchive(new MemoryStream(data, false), ZipArchiveMode.Read);
         var package = new Package(zip);
         try
         {
             // a page listed again is drawn once: each listing would parse the part again
-            foreach (var path in package.PagePaths().Distinct(StringComparer.OrdinalIgnoreCase).Take(MaxPages))
+            foreach (var path in package.PagePaths().Distinct(StringComparer.OrdinalIgnoreCase).Take(Math.Min(MaxPages, maxPages ?? int.MaxValue)))
             {
                 Guard.Check();
                 if (package.Xml(path) is { } page) package.Document.Pages.Add(new PageReader(package, path).Render(page));

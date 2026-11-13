@@ -13,8 +13,33 @@ public enum ThumbnailOutputs
     /// </summary>
     PreviewPdf = 2,
 
-    /// <summary>Both the images and the preview PDF.</summary>
+    /// <summary>Both the images and the preview PDF. Does not include <see cref="Text"/> or <see cref="Placeholder"/>.</summary>
     All = Images | PreviewPdf,
+
+    /// <summary>
+    /// The plain text of each page (<see cref="ThumbnailResult.PageTexts"/>), for search indexing. For a document, the text
+    /// that is laid out; for a PDF, PDFium's text layer (a scanned page has none). An image or a video has no text.
+    /// </summary>
+    Text = 4,
+
+    /// <summary>
+    /// A tiny blurred preview to show while the real thumbnail loads (<see cref="ThumbnailResult.Placeholder"/>): a ThumbHash
+    /// of about 25 bytes and the average colour, taken from page 1, the image or the video frame.
+    /// </summary>
+    Placeholder = 8,
+}
+
+/// <summary>How each thumbnail fills its box.</summary>
+public enum ThumbnailFit
+{
+    /// <summary>The whole page or picture, with its longest side equal to the size. The other side follows the aspect ratio.</summary>
+    Contain,
+
+    /// <summary>
+    /// Exactly the box of <see cref="ThumbnailOptions.AspectRatio"/> (square by default), filled and cropped: a document page
+    /// keeps its top, an image or a video frame its centre. A picture smaller than the box gives a smaller box of the same shape.
+    /// </summary>
+    Cover,
 }
 
 /// <summary>
@@ -102,6 +127,24 @@ public sealed record ThumbnailOptions
     /// </summary>
     public bool IncludeFullSize { get; init; } = true;
 
+    /// <summary>
+    /// How each size fills its box. Default: <see cref="ThumbnailFit.Contain"/>. The full-size image is never cropped.
+    /// </summary>
+    public ThumbnailFit Fit { get; init; } = ThumbnailFit.Contain;
+
+    /// <summary>
+    /// Width divided by height of the box for <see cref="ThumbnailFit.Cover"/>, 0.01 to 100: 1 is square, 16.0 / 9 is wide.
+    /// The longer side of the box is the size. Default 1.
+    /// </summary>
+    public double AspectRatio { get; init; } = 1;
+
+    /// <summary>
+    /// Lay out, write to the preview PDF and read the text of at most this many pages, or <c>null</c> for no limit beyond the
+    /// built-in ones. A thumbnail only needs page 1, so <c>1</c> makes long documents much faster when no preview PDF is needed.
+    /// <see cref="ThumbnailResult.HasMorePages"/> tells whether pages were left out.
+    /// </summary>
+    public int? MaxPages { get; init; }
+
     /// <summary>Encoding of the images. Default: <see cref="ThumbnailFormat.Png"/>.</summary>
     public ThumbnailFormat Format { get; init; } = ThumbnailFormat.Png;
 
@@ -128,6 +171,8 @@ public sealed record ThumbnailOptions
     /// <summary>The usual file extension of <see cref="Format"/>, without the dot: "png", "webp" or "jpg".</summary>
     public string FileExtension => Format.FileExtension();
 
+    private const ThumbnailOutputs AllOutputs = ThumbnailOutputs.All | ThumbnailOutputs.Text | ThumbnailOutputs.Placeholder;
+
     /// <summary>Throws <see cref="ArgumentException"/> if a value is out of range.</summary>
     public void Validate()
     {
@@ -135,7 +180,10 @@ public sealed record ThumbnailOptions
         if (Video is null) throw new ArgumentException("Video must not be null.", nameof(Video));
         if (Limits is null) throw new ArgumentException("Limits must not be null.", nameof(Limits));
         if (Sizes.Any(size => size is < 1 or > 65500)) throw new ArgumentException("Every size must be between 1 and 65500 px.", nameof(Sizes));
-        if ((Outputs & ThumbnailOutputs.All) == 0) throw new ArgumentException("Nothing to produce.", nameof(Outputs));
+        if ((Outputs & AllOutputs) == 0) throw new ArgumentException("Nothing to produce.", nameof(Outputs));
+        if (!Enum.IsDefined(Fit)) throw new ArgumentException("Unknown fit.", nameof(Fit));
+        if (!(AspectRatio is >= 0.01 and <= 100)) throw new ArgumentException("AspectRatio must be between 0.01 and 100.", nameof(AspectRatio));
+        if (MaxPages < 1) throw new ArgumentException("MaxPages must be at least 1.", nameof(MaxPages));
         if ((Outputs & ThumbnailOutputs.Images) != 0 && Sizes.Count == 0 && !IncludeFullSize)
             throw new ArgumentException("No image requested: give a size or set IncludeFullSize.", nameof(Sizes));
         if (!Enum.IsDefined(Format)) throw new ArgumentException("Unknown format.", nameof(Format));

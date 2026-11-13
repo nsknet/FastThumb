@@ -52,6 +52,94 @@ internal static class Pdfium
         finally { pin.Free(); }
     }
 
+    [DllImport(Dll)] private static extern IntPtr FPDFText_LoadPage(IntPtr page);
+    [DllImport(Dll)] private static extern void FPDFText_ClosePage(IntPtr textPage);
+    [DllImport(Dll)] private static extern int FPDFText_CountChars(IntPtr textPage);
+    [DllImport(Dll)] private static extern unsafe int FPDFText_GetText(IntPtr textPage, int start, int count, char* result);
+
+    /// <summary>Most characters read from one page: a page of text holds a few thousand; more is a crafted file.</summary>
+    private const int MaxPageChars = 1 << 20;
+
+    /// <summary>The text layer of the first <paramref name="maxPages"/> pages (line breaks as "\n").</summary>
+    public static unsafe List<string> PageTexts(byte[] pdf, int maxPages, out int pageCount)
+    {
+        var texts = new List<string>();
+        var pin = GCHandle.Alloc(pdf, GCHandleType.Pinned);
+        try
+        {
+            lock (Gate)
+            {
+                var document = Open(pin, pdf.Length);
+                try
+                {
+                    pageCount = FPDF_GetPageCount(document);
+                    for (var index = 0; index < Math.Min(pageCount, maxPages); index++)
+                    {
+                        Guard.Check();
+                        var page = FPDF_LoadPage(document, index);
+                        if (page == IntPtr.Zero) { texts.Add(""); continue; }
+                        try
+                        {
+                            var textPage = FPDFText_LoadPage(page);
+                            if (textPage == IntPtr.Zero) { texts.Add(""); continue; }
+                            try
+                            {
+                                var count = Math.Min(FPDFText_CountChars(textPage), MaxPageChars);
+                                if (count <= 0) { texts.Add(""); continue; }
+                                var buffer = new char[count + 1];
+                                int written;
+                                fixed (char* chars = buffer) written = FPDFText_GetText(textPage, 0, count, chars);
+                                // written counts the terminating zero
+                                var text = new string(buffer, 0, Math.Clamp(written - 1, 0, count));
+                                texts.Add(Normalise(text));
+                            }
+                            finally { FPDFText_ClosePage(textPage); }
+                        }
+                        finally { FPDF_ClosePage(page); }
+                    }
+                }
+                finally { FPDF_CloseDocument(document); }
+            }
+        }
+        finally { pin.Free(); }
+        return texts;
+    }
+
+    /// <summary>PDFium ends lines with "\r\n" and keeps soft hyphens and NULs from some generators: plain lines, trailing "\n".</summary>
+    private static string Normalise(string text)
+    {
+        var lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Replace("\0", "").Replace("­", "").Split('\n');
+        var joined = string.Join('\n', lines.Select(line => line.TrimEnd())).Trim('\n');
+        return joined.Length == 0 ? "" : joined + "\n";
+    }
+
+    /// <summary>Width and height of page 1 in points.</summary>
+    public static (double Width, double Height) FirstPageSize(byte[] pdf)
+    {
+        var pin = GCHandle.Alloc(pdf, GCHandleType.Pinned);
+        try
+        {
+            lock (Gate)
+            {
+                var document = Open(pin, pdf.Length);
+                try
+                {
+                    var page = FPDF_LoadPage(document, 0);
+                    if (page == IntPtr.Zero) throw new InvalidDataException("PDFium cannot load page 1");
+                    try
+                    {
+                        float width = FPDF_GetPageWidthF(page), height = FPDF_GetPageHeightF(page);
+                        if (!(width > 0 && height > 0)) throw new InvalidDataException("PDF page 1 has no size");
+                        return (width, height);
+                    }
+                    finally { FPDF_ClosePage(page); }
+                }
+                finally { FPDF_CloseDocument(document); }
+            }
+        }
+        finally { pin.Free(); }
+    }
+
     /// <summary>Caller holds <see cref="Gate"/>.</summary>
     private static IntPtr Open(GCHandle pin, int length)
     {

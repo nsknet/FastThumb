@@ -86,6 +86,11 @@ step, is in [docs/architecture.md](docs/architecture.md).
 - **Content-based detection**: the format is recognised from the bytes; the file name only breaks ties between
   plain-text formats.
 - **PNG, WebP or JPEG output** with configurable quality and PNG compression level.
+- **Cropped tiles**: `Fit = Cover` gives exact squares (or any aspect ratio) for grids and avatars, keeping the top
+  of a page or the centre of a picture.
+- **Text for search**: the plain text of every page from the same read, for full-text search or a language model.
+- **Placeholders**: a ThumbHash of about 25 bytes and the average colour, to show while the thumbnail loads.
+- **Page limit**: `MaxPages = 1` skips laying out the rest of a long document when only the thumbnail is needed.
 - **Bytes, streams or files**: a seekable video stream is read in place (only the container header and one group of
   pictures), so thumbnails of remote videos are cheap.
 - **Thread-safe**: one `ThumbnailGenerator` instance can serve any number of concurrent calls.
@@ -195,6 +200,23 @@ var options = ThumbnailOptions.Default with
 var generator = new ThumbnailGenerator(options);        // throws ArgumentException if an option is out of range
 ```
 
+Square tiles with a placeholder, the text for search, and only page 1 laid out:
+
+```csharp
+var options = ThumbnailOptions.Default with
+{
+    Sizes = [300],
+    IncludeFullSize = false,
+    Fit = ThumbnailFit.Cover,                     // exactly 300 x 300; AspectRatio = 16.0 / 9 for wide tiles
+    MaxPages = 1,                                 // thumbnails only need page 1
+    Outputs = ThumbnailOutputs.Images | ThumbnailOutputs.Text | ThumbnailOutputs.Placeholder,
+};
+var result = new ThumbnailGenerator(options).GenerateFromFile("report.docx");
+string text = result.Text!;                       // page 1 only here, because of MaxPages
+string blur = result.Placeholder!.ThumbHashBase64; // decode in the browser with the thumbhash package
+string color = result.Placeholder.AverageColor;    // "#f4f5f6"
+```
+
 Every option, its default and its range are listed in [docs/options.md](docs/options.md).
 
 ### Dependency injection
@@ -226,10 +248,13 @@ IReadOnlyCollection<string> extensions = ThumbnailGenerator.SupportedExtensions;
 | Member | Meaning |
 |---|---|
 | `Format` | The `DocumentFormat` recognised from the content. |
-| `PageCount` | Number of pages; an image or a video counts as one. |
+| `PageCount` | Number of pages; an image or a video counts as one. With `MaxPages`, a document reports the pages laid out. |
+| `HasMorePages` | Whether `MaxPages` left pages out. |
 | `Images` | The thumbnails: the full-size image first (if requested), then one per entry of `Sizes`, in that order. |
 | `FullSize`, `Find(int)` | The full-size image, or the image made for a given size (`null` if absent). |
 | `PreviewPdf` | A PDF of every page, or `null` (not requested, or the input is a PDF, an image or a video). |
+| `PageTexts`, `Text` | The text of each page, and all of it in one string (`null` unless `Outputs` includes `Text`). |
+| `Placeholder` | ThumbHash and average colour (`null` unless `Outputs` includes `Placeholder`). |
 | `Timings` | Time spent rendering, writing the preview PDF and encoding (`ThumbnailTimings`). |
 
 Thumbnails are always made from the first page (or slide, or printed page of a spreadsheet).

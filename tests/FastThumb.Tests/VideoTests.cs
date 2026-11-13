@@ -48,6 +48,26 @@ public class VideoTests
 
     [VideoTheory]
     [MemberData(nameof(Videos))]
+    public void Video_frame_gives_cover_boxes_a_placeholder_and_no_text(string file)
+    {
+        var generator = new ThumbnailGenerator(Options with
+        {
+            Sizes = [100, 32],
+            IncludeFullSize = false,
+            Fit = ThumbnailFit.Cover,
+            Outputs = ThumbnailOutputs.Images | ThumbnailOutputs.Text | ThumbnailOutputs.Placeholder,
+        });
+        var result = generator.GenerateFromFile(VideoFixtures.PathOf(file));
+        // 64 x 48 cannot fill 100 x 100: the largest square it fills is 48 x 48
+        Assert.Equal((48, 48), (result.Find(100)!.Width, result.Find(100)!.Height));
+        Assert.Equal((32, 32), (result.Find(32)!.Width, result.Find(32)!.Height));
+        Assert.Empty(result.PageTexts!);
+        Assert.NotNull(result.Placeholder);
+        Assert.True((result.Placeholder.ThumbHash[4] & 0x80) != 0, "a 64 x 48 frame is landscape");
+    }
+
+    [VideoTheory]
+    [MemberData(nameof(Videos))]
     public void Video_frame_is_scaled_down_but_never_enlarged(string file)
     {
         var generator = new ThumbnailGenerator(Options with { Sizes = [500, 32], Format = ThumbnailFormat.Jpeg });

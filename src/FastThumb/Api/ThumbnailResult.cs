@@ -126,11 +126,47 @@ public sealed class ThumbnailResult
         Timings = timings;
     }
 
+    /// <summary>Sets the optional parts of the result.</summary>
+    internal ThumbnailResult With(IReadOnlyList<string>? pageTexts, ThumbnailPlaceholder? placeholder, bool hasMorePages)
+    {
+        PageTexts = pageTexts;
+        Placeholder = placeholder;
+        HasMorePages = hasMorePages;
+        return this;
+    }
+
     /// <summary>The format recognised from the content.</summary>
     public DocumentFormat Format { get; }
 
-    /// <summary>Number of pages; an image or a video counts as one.</summary>
+    /// <summary>
+    /// Number of pages; an image or a video counts as one. For a document that <see cref="ThumbnailOptions.MaxPages"/> cut short,
+    /// the pages laid out (see <see cref="HasMorePages"/>); a PDF always reports all its pages.
+    /// </summary>
     public int PageCount { get; }
+
+    /// <summary>
+    /// Whether <see cref="ThumbnailOptions.MaxPages"/> left pages out (or, for the text of a PDF, the built-in limit of 3000
+    /// pages): they are not in <see cref="PreviewPdf"/> or <see cref="PageTexts"/>, and for a document not counted in
+    /// <see cref="PageCount"/>.
+    /// </summary>
+    public bool HasMorePages { get; private set; }
+
+    /// <summary>
+    /// The plain text of each page, page 1 first, or <c>null</c> if <see cref="ThumbnailOutputs.Text"/> was not requested.
+    /// Lines end with a line feed; text far apart on one line (spreadsheet cells, columns) is separated by a tab.
+    /// Empty for an image or a video.
+    /// </summary>
+    public IReadOnlyList<string>? PageTexts { get; private set; }
+
+    /// <summary>
+    /// All of <see cref="PageTexts"/> in one string, pages separated by a blank line, or <c>null</c> if
+    /// <see cref="ThumbnailOutputs.Text"/> was not requested.
+    /// </summary>
+    public string? Text => PageTexts is null ? null
+        : string.Join("\n\n", PageTexts.Select(page => page.TrimEnd('\n')).Where(page => page.Length > 0));
+
+    /// <summary>A tiny preview to show while the thumbnail loads, or <c>null</c> if <see cref="ThumbnailOutputs.Placeholder"/> was not requested.</summary>
+    public ThumbnailPlaceholder? Placeholder { get; private set; }
 
     /// <summary>
     /// The thumbnails: the full-size image first (if requested), then one per <see cref="ThumbnailOptions.Sizes"/>, in that order.
@@ -149,6 +185,31 @@ public sealed class ThumbnailResult
 
     /// <summary>The thumbnail made for a requested size, or <c>null</c>.</summary>
     public Thumbnail? Find(int maxDimension) => Images.FirstOrDefault(image => image.MaxDimension == maxDimension);
+}
+
+/// <summary>
+/// A tiny preview of page 1, the image or the video frame, to show while the real thumbnail loads.
+/// <see href="https://evanw.github.io/thumbhash/">ThumbHash</see> decoders exist for JavaScript, Swift, Kotlin, Rust and others.
+/// </summary>
+public sealed class ThumbnailPlaceholder
+{
+    internal ThumbnailPlaceholder(byte[] thumbHash, string averageColor)
+    {
+        ThumbHash = thumbHash;
+        AverageColor = averageColor;
+    }
+
+    /// <summary>The ThumbHash: about 25 bytes that decode to a blurred picture with the right aspect ratio and colours.</summary>
+    public byte[] ThumbHash { get; }
+
+    /// <summary><see cref="ThumbHash"/> as Base64, ready for a JSON field or an HTML attribute.</summary>
+    public string ThumbHashBase64 => Convert.ToBase64String(ThumbHash);
+
+    /// <summary>The average colour as CSS hex, "#rrggbb": a background to show before anything else.</summary>
+    public string AverageColor { get; }
+
+    /// <inheritdoc />
+    public override string ToString() => $"{AverageColor} {ThumbHashBase64}";
 }
 
 /// <summary>Base type of the errors this library reports about an input.</summary>
