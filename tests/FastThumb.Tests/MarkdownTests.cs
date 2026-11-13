@@ -331,7 +331,8 @@ public class MarkdownTests
         { "comments", string.Concat(Enumerable.Repeat("<!-- ", 50_000)) },
         { "tags", string.Concat(Enumerable.Repeat("<a b='", 50_000)) },
         { "quotes", new string('>', 100_000) + " deep" },
-        { "lists", string.Concat(Enumerable.Range(0, 3000).Select(n => new string(' ', n * 2) + "- item\n")) },
+        // 1500 levels is 2.25 MB of indentation; 3000 levels (9 MB) took over 20 s on the slowest CI runner while being linear
+        { "lists", string.Concat(Enumerable.Range(0, 1500).Select(n => new string(' ', n * 2) + "- item\n")) },
         { "entities", string.Concat(Enumerable.Repeat("&#x", 100_000)) },
         { "table", "|a|\n|-|\n" + string.Concat(Enumerable.Repeat("|" + new string('`', 3) + "|\n", 20_000)) },
         { "code words", "```cs\n" + string.Concat(Enumerable.Repeat("a ", 500_000)) + "\n```" },
