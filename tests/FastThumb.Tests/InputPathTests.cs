@@ -102,4 +102,29 @@ public class InputPathTests
         var results = await Task.WhenAll(samples.Concat(samples).Select(s => Task.Run(() => Generator.Generate(s.Bytes, s.FileName))));
         for (var i = 0; i < results.Length; i++) AssertSame(expected[i % samples.Length], results[i]);
     }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(65536)]
+    [InlineData(65537)]
+    [InlineData(9_000_123)]
+    public async Task A_non_seekable_stream_is_read_into_one_exact_array(int length)
+    {
+        var data = new byte[length];
+        new Random(length).NextBytes(data);
+        var options = ThumbnailOptions.Default with { Limits = new ResourceLimits { MaxInputBytes = Math.Max(1, length) } };
+
+        Assert.Equal(data, Thumbnailer.ReadAll(new NonSeekableStream(new MemoryStream(data, false)), options));
+        Assert.Equal(data, await Thumbnailer.ReadAllAsync(new NonSeekableStream(new MemoryStream(data, false)), options, default));
+
+        if (length == 0) return;
+        var tooSmall = ThumbnailOptions.Default with { Limits = new ResourceLimits { MaxInputBytes = length - 1 } };
+        if (length > 1)
+        {
+            Assert.Throws<ResourceLimitExceededException>(() => Thumbnailer.ReadAll(new NonSeekableStream(new MemoryStream(data, false)), tooSmall));
+            await Assert.ThrowsAsync<ResourceLimitExceededException>(() => Thumbnailer.ReadAllAsync(new NonSeekableStream(new MemoryStream(data, false)), tooSmall, default));
+        }
+    }
+
 }

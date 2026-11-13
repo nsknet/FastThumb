@@ -128,6 +128,7 @@ sealed record RunSettings(
                     break;
                 case "--aspect": options = options with { AspectRatio = ParseAspect(name, Value()) }; break;
                 case "--max-pages": options = options with { MaxPages = Int(1, int.MaxValue) }; break;
+                case "--dpi": options = options with { PageDpi = Number(1, 1200) }; break;
                 case "--text": options = options with { Outputs = options.Outputs | ThumbnailOutputs.Text }; break;
                 case "--placeholder": options = options with { Outputs = options.Outputs | ThumbnailOutputs.Placeholder }; break;
                 case "-q" or "--quality": options = options with { Quality = Int(1, 100) }; break;
@@ -243,8 +244,9 @@ static class Cli
                   --placeholder            also make a ThumbHash and average colour (shown with
                                            --json and --verbose)
                   --max-pages <n>          lay out, write and read at most n pages             [all]
+                  --dpi <n>                resolution of a page's full size, 1–1200            [96]
               -s, --sizes <list>           long side of each image in px, comma separated; "full" is
-                                           the page at 96 DPI, a PDF page at 72 DPI, an image or video
+                                           the page at --dpi (96, a PDF 72), an image or video
                                            at its own size; images are never enlarged
                                                                                    [full,2500,1000,500,300,100]
                   --fit <how>              contain: whole page, long side = size; cover: fill

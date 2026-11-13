@@ -92,6 +92,8 @@ step, is in [docs/architecture.md](docs/architecture.md).
 - **Text for search**: the plain text of every page from the same read, for full-text search or a language model.
 - **Placeholders**: a ThumbHash of about 25 bytes and the average colour, to show while the thumbnail loads.
 - **Page limit**: `MaxPages = 1` skips laying out the rest of a long document when only the thumbnail is needed.
+- **Print resolution**: `PageDpi = 300` makes the full-size image of a page print quality; the page is still drawn
+  only once for every size.
 - **Inspect**: format, page count, size, title, author, dates and video duration without rendering anything.
 - **Observable**: traces and metrics through `System.Diagnostics` (`ActivitySource` and `Meter` named `FastThumb`),
   ready for OpenTelemetry, with no extra dependency.

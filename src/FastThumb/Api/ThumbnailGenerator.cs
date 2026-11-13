@@ -88,6 +88,15 @@ public sealed class ThumbnailGenerator : IThumbnailGenerator
     /// <summary>The file extensions this library reads, lower case with the dot (".docx", ".pdf", ".mp4", ...).</summary>
     public static IReadOnlyCollection<string> SupportedExtensions => FormatDetector.Extensions;
 
+    /// <summary>
+    /// Applies now the process-wide libvips settings that are otherwise applied by the first call that needs them: the
+    /// operation cache is turned off, and loaders libvips marks as unfit for untrusted input are refused (see docs/security.md).
+    /// Call it at startup when the process also uses libvips itself, so that libvips behaves the same from the start instead
+    /// of changing at the first thumbnail. Only libvips is loaded: PDFium, Skia and the video decoder still load when a file
+    /// needs them. Calling it again does nothing.
+    /// </summary>
+    public static void ApplyProcessSettings() => Thumbnailer.ApplyProcessSettings();
+
     /// <summary>Recognises the format of a file from its content.</summary>
     /// <param name="data">The whole file (ZIP-based formats keep their directory at the end).</param>
     /// <param name="fileName">The file name or extension, if known; only breaks ties between plain-text formats.</param>
@@ -126,14 +135,8 @@ public sealed class ThumbnailGenerator : IThumbnailGenerator
         ArgumentNullException.ThrowIfNull(stream);
         // a seekable stream is handed over as it is (a video is then read in place); any other one is buffered asynchronously
         if (stream.CanSeek) return await Task.Run(() => Generate(stream, fileName, cancellationToken), cancellationToken).ConfigureAwait(false);
-        using var buffer = new MemoryStream();
-        var chunk = new byte[81920];
-        for (int n; (n = await stream.ReadAsync(chunk, cancellationToken).ConfigureAwait(false)) > 0;)
-        {
-            if (buffer.Length + n > Options.Limits.MaxInputBytes) throw Thumbnailer.TooLarge(Options);
-            buffer.Write(chunk, 0, n);
-        }
-        var data = buffer.GetBuffer().AsMemory(0, (int)buffer.Length);
+        // one array of the exact length, which Generate uses as it is: the input is held once while it is processed
+        var data = await Thumbnailer.ReadAllAsync(stream, Options, cancellationToken).ConfigureAwait(false);
         return await Task.Run(() => Generate(data, fileName, cancellationToken), cancellationToken).ConfigureAwait(false);
     }
 

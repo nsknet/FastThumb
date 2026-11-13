@@ -24,6 +24,7 @@ generator are available as `ThumbnailGenerator.Options` and apply to every call.
 | `Outputs` | `ThumbnailOutputs` | `All` | at least one flag | What to produce: any of `Images`, `PreviewPdf`, `Text`, `Placeholder`. |
 | `Sizes` | `IReadOnlyList<int>` | `DefaultSizes`: 2500, 1000, 500, 300, 100 | each 1 to 65500; may be empty if `IncludeFullSize` is set | Longest side, in pixels, of each thumbnail. |
 | `IncludeFullSize` | `bool` | `true` | | Also produce the full-size image. |
+| `PageDpi` | `double?` | `null` (96, a PDF 72) | 1 to 1200, or `null` | Resolution of the full-size image of a page. |
 | `Fit` | `ThumbnailFit` | `Contain` | `Contain`, `Cover` | Whole page in the size, or a filled and cropped box. |
 | `AspectRatio` | `double` | 1 | 0.01 to 100 | Width / height of the box for `Fit = Cover`. |
 | `MaxPages` | `int?` | `null` | at least 1, or `null` | Pages laid out, written to the preview PDF and read for text. |
@@ -110,12 +111,22 @@ What "full size" means depends on the input:
 
 | Input | Full-size image |
 |---|---|
-| Document, spreadsheet, presentation, XPS | Page 1 at 96 DPI |
-| PDF | Page 1 at 72 DPI (one pixel per point) |
+| Document, spreadsheet, presentation, XPS | Page 1 at `PageDpi`, by default 96 DPI |
+| PDF | Page 1 at `PageDpi`, by default 72 DPI (one pixel per point) |
 | Image | The image at its own size |
 | Video | The frame at its own size (sample aspect ratio applied) |
 
 Every full-size image is scaled down, if needed, to fit `ResourceLimits.MaxPixels`.
+
+`PageDpi = 300` gives a print-quality full-size page (an A4 page is 2480 x 3508 px, a Letter page 2550 x 3300 px). Page 1
+is drawn once, at the larger of the full size and the largest entry of `Sizes`, and every image is cut from that one
+drawing, so the full-size image is never enlarged from a smaller one. Memory and encoding time grow with it: a Letter
+page at 300 DPI is drawn at 2550 x 3300 px (34 MB of pixels, plus a copy while the images are made), where the default
+sizes alone need 1932 x 2500 px.
+
+```csharp
+var printQuality = ThumbnailOptions.Default with { PageDpi = 300 };
+```
 
 An image or a video frame is never enlarged: a size larger than the original yields the original size. A document
 page is rendered at whatever size is asked for.
@@ -222,5 +233,7 @@ Every `Generate*` method takes an optional `CancellationToken`. It is checked:
 - between encoded sizes;
 - on every read the video decoder makes from the stream.
 
-A cancelled call throws `OperationCanceledException`. Rendering a PDF page in PDFium and encoding a single image are
-not interrupted once started.
+- while PDFium draws a PDF page (it stops between drawing operations and lets go of its lock).
+
+A cancelled call throws `OperationCanceledException`. Encoding a single image, and drawing a page of a document other
+than a PDF, are not interrupted once started.

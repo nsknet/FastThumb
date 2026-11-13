@@ -12,6 +12,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The package carries a short, Markdown-only README, so its page on nuget.org no longer shows raw HTML or broken
   images.
 
+## [Unreleased]
+
+### Added
+
+- **Page resolution**: `ThumbnailOptions.PageDpi` sets the resolution of the full-size image of a page (documents,
+  spreadsheets, presentations, XPS and PDF), for example 300 for print quality. Page 1 is drawn once, at the larger of
+  the full size and the largest size, so the full-size image is never enlarged. Without it the full size stays 96 DPI
+  for documents and 72 DPI for PDF. Command-line tool: `--dpi`.
+- `ThumbnailGenerator.ApplyProcessSettings()` applies the process-wide libvips settings at a chosen time (for a process
+  that also uses libvips itself), instead of at the first call that needs them. Nothing else is loaded early.
+
+### Changed
+
+- **A PDF page stops drawing when the call is cancelled**: PDFium draws progressively and checks the
+  `CancellationToken`, so a slow page no longer keeps the process-wide PDFium lock until it is finished.
+- **Less memory for non-seekable streams**: `GenerateAsync` held such a stream's bytes about twice while the file was
+  processed (a growing buffer and a copy of it); it now reads them into one array of the exact length and holds them
+  once. `Generate` reads them the same way, without a growing buffer.
+
+### Fixed
+
+- A page scaled down to fit `ResourceLimits.MaxPixels` could come out a few pixels over the limit after rounding.
+
 ## [1.3.0] - 2026-11-13
 
 ### Added

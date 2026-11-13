@@ -53,7 +53,8 @@ their paths. Several inputs can be given. An input that does not exist is a comm
 | `--text` | | Also write the text of every page to `<dir>/<name>.txt`, pages separated by a form feed (`\f`). |
 | `--placeholder` | | Also make a ThumbHash and the average colour; shown with `--json` and `--verbose`. |
 | `--max-pages <n>` | all | Lay out, write and read the text of at most `n` pages. |
-| `-s`, `--sizes <list>` | `full,2500,1000,500,300,100` | Longest side of each image in pixels (1 to 65500), comma separated. `full` is the page at 96 DPI, a PDF page at 72 DPI, an image or a video frame at its own size. Images are never enlarged. |
+| `--dpi <n>` | 96 (PDF 72) | Resolution of the full-size image of a page (documents, PDF), 1 to 1200. |
+| `-s`, `--sizes <list>` | `full,2500,1000,500,300,100` | Longest side of each image in pixels (1 to 65500), comma separated. `full` is the page at `--dpi` (96, a PDF 72), an image or a video frame at its own size. Images are never enlarged. |
 | `--fit <how>` | `contain` | `contain`: the whole page, longest side = size. `cover`: fill the box and crop, keeping the top of a page or the centre of a picture. |
 | `--aspect <w:h>` | `1:1` | Shape of the box for `--fit cover`: `16:9`, `3:4`, or a number such as `0.75` (0.01 to 100). |
 | `-f`, `--format <format>` | `png` | `png`, `webp` or `jpeg` (`jpg`). |

@@ -75,7 +75,9 @@ Attack surface is reduced by leaving code out:
   encoders, no muxers, no filters, no audio decoders, no hardware acceleration and no devices. Only the demuxers,
   video decoders and parsers listed in [native/thumbvideo/build.sh](../native/thumbvideo/build.sh) exist in the
   binary. Input bytes reach it only through read and seek callbacks on the .NET stream.
-- **libvips**: loaders that libvips itself marks as unsuitable for untrusted input are blocked at start-up. SVG is
+- **libvips**: loaders that libvips itself marks as unsuitable for untrusted input are blocked, for the whole process,
+  by the first call that uses libvips, or earlier by `ThumbnailGenerator.ApplyProcessSettings()` (call it at start-up
+  if the process also uses libvips for its own work, so libvips behaves the same from the start). SVG is
   the one exception: it is read from memory with no base URI, so it cannot reach other files, and its declared size
   goes through the `MaxPixels` check like any other image. libvips' operation cache is turned off.
 - **Managed image readers** for PSD, TGA, EPS, camera RAW and JPEG 2000 replace native loaders the bundled libvips
@@ -99,8 +101,8 @@ The limits stop the cheap attacks. Three things cannot be solved from inside the
    components when security fixes are published. The FFmpeg and dav1d versions are pinned in `build.sh`.
 2. **Documents and PDFs have no time limit.** Only video has a deadline. Loops are bounded, but a deliberately heavy
    document can still keep one thread busy for seconds to tens of seconds. Use the `CancellationToken` to give up
-   on documents (it is checked between pages and during reads); rendering a PDF page cannot be interrupted, and
-   because PDFium is serialised by one process-wide lock, one slow PDF makes other PDFs wait.
+   on documents (it is checked between pages, during reads and while a PDF page is drawn). PDFium is serialised by
+   one process-wide lock, so one slow PDF makes other PDFs wait until it finishes or is cancelled.
 3. **There is no overall memory ceiling per input.** Each limit protects one allocation; several large parts in one
    file still add up.
 

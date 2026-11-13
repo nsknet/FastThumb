@@ -122,10 +122,18 @@ public sealed record ThumbnailOptions
     public IReadOnlyList<int> Sizes { get; init; } = DefaultSizes;
 
     /// <summary>
-    /// Also produce the full-size image: a document page at 96 DPI, a PDF page at 72 DPI, an image or a video frame at its own
-    /// size (within <see cref="ResourceLimits.MaxPixels"/>).
+    /// Also produce the full-size image: a page at <see cref="PageDpi"/> (by default 96 DPI for a document, 72 DPI for a PDF),
+    /// an image or a video frame at its own size (within <see cref="ResourceLimits.MaxPixels"/>).
     /// </summary>
     public bool IncludeFullSize { get; init; } = true;
+
+    /// <summary>
+    /// Resolution of the full-size image of a page (documents, spreadsheets, presentations, XPS and PDF), 1 to 1200 DPI, or
+    /// <c>null</c> for 96 DPI for a document and 72 DPI for a PDF. 300 gives a print-quality page: an A4 page is then
+    /// 2480 x 3508 px. The page is drawn once at the larger of this and the largest size, and every size is cut from it.
+    /// A page is still scaled down to fit <see cref="ResourceLimits.MaxPixels"/>.
+    /// </summary>
+    public double? PageDpi { get; init; }
 
     /// <summary>
     /// How each size fills its box. Default: <see cref="ThumbnailFit.Contain"/>. The full-size image is never cropped.
@@ -183,6 +191,7 @@ public sealed record ThumbnailOptions
         if ((Outputs & AllOutputs) == 0) throw new ArgumentException("Nothing to produce.", nameof(Outputs));
         if (!Enum.IsDefined(Fit)) throw new ArgumentException("Unknown fit.", nameof(Fit));
         if (!(AspectRatio is >= 0.01 and <= 100)) throw new ArgumentException("AspectRatio must be between 0.01 and 100.", nameof(AspectRatio));
+        if (PageDpi is { } dpi && !(dpi is >= 1 and <= 1200)) throw new ArgumentException("PageDpi must be between 1 and 1200.", nameof(PageDpi));
         if (MaxPages < 1) throw new ArgumentException("MaxPages must be at least 1.", nameof(MaxPages));
         if ((Outputs & ThumbnailOutputs.Images) != 0 && Sizes.Count == 0 && !IncludeFullSize)
             throw new ArgumentException("No image requested: give a size or set IncludeFullSize.", nameof(Sizes));

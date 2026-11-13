@@ -31,6 +31,9 @@ internal static class Thumbnailer
         NetVips.Operation.Block("VipsForeignLoadSvg", false);
     }
 
+    /// <summary>Runs the static constructor (once): the libvips settings above, without processing anything.</summary>
+    public static void ApplyProcessSettings() { }
+
     /// <summary>Thumbnails for an input held in memory. The caller has validated <paramref name="options"/>.</summary>
     public static ThumbnailResult Create(byte[] data, string? extension, ThumbnailOptions options)
     {
@@ -74,11 +77,12 @@ internal static class Thumbnailer
                 if (texts == null) count = Pdfium.PageCount(data);
                 return Finish(new ThumbnailResult(format, count, images, null, new(Lap(clock), TimeSpan.Zero, TimeSpan.Zero)), want, null, texts, More());
             }
-            // with no size, page 1 is rendered at its own size (72 DPI), which is the full size
+            // page 1 is drawn once, large enough for the largest size and for the full size (PageDpi, 72 DPI by default)
             var longSide = !want.Images ? PlaceholderSide
                 : options.Fit == ThumbnailFit.Cover && options.Sizes.Count > 0 ? MasterSide(Pdfium.FirstPageSize(data), options)
                 : options.Sizes.Count > 0 ? options.Sizes.Max() : 0;
-            using var bitmap = Pdfium.RenderPage(data, 0, longSide, options.Limits.MaxPixels, out var width, out var height, out count);
+            var fullDpi = want.Images && options.IncludeFullSize ? options.PageDpi ?? 72 : 0;
+            using var bitmap = Pdfium.RenderPage(data, 0, longSide, fullDpi, options.Limits.MaxPixels, out var width, out var height, out count);
             var render = Lap(clock);
             (width, height) = Fit(width, height, options.Limits.MaxPixels);
             var placeholder = EncodeBitmap(bitmap, width, height, images, options, want, cropTop: true);
@@ -129,12 +133,15 @@ internal static class Thumbnailer
         {
             if (want.Picture)
             {
-                // the full size is the page at 96 DPI, the usual screen resolution for office documents
-                // (page sizes come from the file: within MaxPixels, and the master too)
+                // the full size is the page at PageDpi, by default 96 DPI, the usual screen resolution for office documents
+                // (page sizes come from the file: within MaxPixels, and the master too). The master is drawn once, large
+                // enough for the largest size and for the full size, so nothing is enlarged from it.
                 var maxPixels = options.Limits.MaxPixels;
-                var (fullWidth, fullHeight) = Fit(first.Width * 96.0 / 72, first.Height * 96.0 / 72, maxPixels);
+                var dpi = options.PageDpi ?? 96;
+                var (fullWidth, fullHeight) = Fit(first.Width * dpi / 72, first.Height * dpi / 72, maxPixels);
                 var longSide = !want.Images ? PlaceholderSide
-                    : options.Sizes.Count > 0 ? MasterSide(first.Width, first.Height, options) : Math.Max(fullWidth, fullHeight);
+                    : Math.Max(options.Sizes.Count > 0 ? MasterSide(first.Width, first.Height, options) : 0,
+                        options.IncludeFullSize ? Math.Max(fullWidth, fullHeight) : 0);
                 var (masterWidth, masterHeight) = Fit((double)first.Width * longSide / Math.Max(first.Width, first.Height),
                     (double)first.Height * longSide / Math.Max(first.Width, first.Height), maxPixels);
                 master = first.ToBitmap(Math.Max(masterWidth, masterHeight));
@@ -243,18 +250,74 @@ internal static class Thumbnailer
         return other(ReadAll(stream, options));
     }
 
-    /// <summary>The rest of a non-seekable stream, within <see cref="ResourceLimits.MaxInputBytes"/>.</summary>
+    /// <summary>
+    /// The rest of a non-seekable stream in one array of its exact length, within <see cref="ResourceLimits.MaxInputBytes"/>.
+    /// </summary>
     public static byte[] ReadAll(Stream stream, ThumbnailOptions options)
     {
-        using var buffer = new MemoryStream();
-        var chunk = new byte[81920];
-        for (int n; (n = stream.Read(chunk)) > 0;)
+        var buffer = new ChunkedBuffer(options);
+        for (int n; (n = stream.Read(buffer.Space().Span)) > 0;)
         {
-            if (buffer.Length + n > options.Limits.MaxInputBytes) throw TooLarge(options);
-            buffer.Write(chunk, 0, n);
+            buffer.Advance(n);
             Guard.Check();
         }
         return buffer.ToArray();
+    }
+
+    /// <summary>Same as <see cref="ReadAll"/>, reading asynchronously.</summary>
+    public static async Task<byte[]> ReadAllAsync(Stream stream, ThumbnailOptions options, CancellationToken cancellationToken)
+    {
+        var buffer = new ChunkedBuffer(options);
+        for (int n; (n = await stream.ReadAsync(buffer.Space(), cancellationToken).ConfigureAwait(false)) > 0;) buffer.Advance(n);
+        return buffer.ToArray();
+    }
+
+    /// <summary>
+    /// Bytes of unknown length kept in chunks that grow to 4 MiB, then copied once into an array of the exact length. A
+    /// growing MemoryStream would hold up to twice the input in spare capacity, and its buffer would still need a copy to
+    /// become an exact array; here the chunks can be collected as soon as the array is made, so only the input itself stays
+    /// in memory while it is processed.
+    /// </summary>
+    private sealed class ChunkedBuffer(ThumbnailOptions options)
+    {
+        private const int FirstChunk = 64 << 10, LargestChunk = 4 << 20;
+        private readonly List<byte[]> _chunks = [];
+        private int _used;      // bytes used in the last chunk
+        private long _length;
+
+        /// <summary>Free space at the end, at least one byte, never past the input limit plus one byte (to detect it).</summary>
+        public Memory<byte> Space()
+        {
+            if (_chunks.Count == 0 || _used == _chunks[^1].Length)
+            {
+                var size = _chunks.Count == 0 ? FirstChunk : Math.Min(LargestChunk, _chunks[^1].Length * 2);
+                _chunks.Add(GC.AllocateUninitializedArray<byte>(size));
+                _used = 0;
+            }
+            var room = (int)Math.Min(_chunks[^1].Length - _used, options.Limits.MaxInputBytes - _length + 1);
+            return _chunks[^1].AsMemory(_used, room);
+        }
+
+        public void Advance(int count)
+        {
+            _used += count;
+            _length += count;
+            if (_length > options.Limits.MaxInputBytes) throw TooLarge(options);
+        }
+
+        public byte[] ToArray()
+        {
+            var data = GC.AllocateUninitializedArray<byte>((int)_length);
+            var at = 0;
+            for (var i = 0; i < _chunks.Count; i++)
+            {
+                var count = i == _chunks.Count - 1 ? _used : _chunks[i].Length;
+                _chunks[i].AsSpan(0, count).CopyTo(data.AsSpan(at));
+                at += count;
+            }
+            _chunks.Clear();
+            return data;
+        }
     }
 
     public static ResourceLimitExceededException TooLarge(ThumbnailOptions options) =>
@@ -316,9 +379,11 @@ internal static class Thumbnailer
         if (!(width > 0 && height > 0)) throw new InvalidDocumentException("The page or image has no size.");
         if (width * height > maxPixels)
         {
+            // rounded down, so that the result really holds at most maxPixels
             var scale = Math.Sqrt(maxPixels / (width * height));
-            width *= scale;
-            height *= scale;
+            // (less a hair, so a square root that lands just under a whole number does not lose a pixel)
+            width = Math.Floor(width * scale + 1e-6);
+            height = Math.Floor(height * scale + 1e-6);
         }
         return ((int)Math.Clamp(Math.Round(width), 1, int.MaxValue), (int)Math.Clamp(Math.Round(height), 1, int.MaxValue));
     }
@@ -416,7 +481,12 @@ internal static class Thumbnailer
         if (!want.Images) return placeholder;
 
         var wanted = new List<(int?, object)>();
-        if (options.IncludeFullSize) wanted.Add((null, (Math.Max(1, fullWidth), Math.Max(1, fullHeight))));
+        if (options.IncludeFullSize)
+        {
+            // a master drawn at the full size can differ from it by a pixel of rounding: it is the full size then
+            if (Math.Abs(fullWidth - master.Width) <= 1 && Math.Abs(fullHeight - master.Height) <= 1) (fullWidth, fullHeight) = (master.Width, master.Height);
+            wanted.Add((null, (Math.Max(1, fullWidth), Math.Max(1, fullHeight))));
+        }
         foreach (var box in options.Sizes)
         {
             if (options.Fit == ThumbnailFit.Cover) { wanted.Add((box, new Cover(CoverBox(box, options.AspectRatio)))); continue; }

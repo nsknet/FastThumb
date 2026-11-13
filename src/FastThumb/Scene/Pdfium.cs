@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using SkiaSharp;
 
@@ -23,17 +24,36 @@ internal static class Pdfium
     [DllImport(Dll)] private static extern float FPDF_GetPageHeightF(IntPtr page);
     [DllImport(Dll)] private static extern IntPtr FPDFBitmap_CreateEx(int width, int height, int format, IntPtr firstScan, int stride);
     [DllImport(Dll)] private static extern void FPDFBitmap_FillRect(IntPtr bitmap, int left, int top, int width, int height, uint color);
-    [DllImport(Dll)] private static extern void FPDF_RenderPageBitmap(IntPtr bitmap, IntPtr page, int startX, int startY, int sizeX, int sizeY, int rotate, int flags);
+    [DllImport(Dll)] private static extern unsafe int FPDF_RenderPageBitmap_Start(IntPtr bitmap, IntPtr page, int startX, int startY, int sizeX, int sizeY, int rotate, int flags, Pause* pause);
+    [DllImport(Dll)] private static extern unsafe int FPDF_RenderPage_Continue(IntPtr page, Pause* pause);
+    [DllImport(Dll)] private static extern void FPDF_RenderPage_Close(IntPtr page);
     [DllImport(Dll)] private static extern void FPDFBitmap_Destroy(IntPtr bitmap);
 
     private const int FormatBgra = 4;
     private const int FlagAnnotations = 0x01;
+    private const int RenderToBeContinued = 1;
+
+    /// <summary>IFSDK_PAUSE: PDFium asks it, every so many page objects, whether to stop drawing for now.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private unsafe struct Pause
+    {
+        public int Version;
+        public delegate* unmanaged[Cdecl]<Pause*, int> NeedToPauseNow;
+        public IntPtr User;
+    }
+
+    /// <summary>
+    /// Pauses only when the call is cancelled. PDFium calls back on the thread that is drawing, which is the thread whose
+    /// cancellation <see cref="Guard"/> holds.
+    /// </summary>
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static unsafe int NeedToPauseNow(Pause* pause) => Guard.Cancellation.IsCancellationRequested ? 1 : 0;
 
     public static SKBitmap RenderFirstPage(byte[] pdf, int longSide, out int fullWidth, out int fullHeight)
         => RenderPage(pdf, 0, longSide, out fullWidth, out fullHeight, out _);
 
     public static SKBitmap RenderPage(byte[] pdf, int pageIndex, int longSide, out int fullWidth, out int fullHeight, out int pageCount)
-        => RenderPage(pdf, pageIndex, longSide, ResourceLimits.Default.MaxPixels, out fullWidth, out fullHeight, out pageCount);
+        => RenderPage(pdf, pageIndex, longSide, longSide > 0 ? 0 : 72, ResourceLimits.Default.MaxPixels, out fullWidth, out fullHeight, out pageCount);
 
     [DllImport(Dll)] private static extern int FPDF_GetPageCount(IntPtr document);
 
@@ -191,9 +211,12 @@ internal static class Pdfium
         return document;
     }
 
-    /// <param name="longSide">long side of the bitmap in pixels; 0 = the page's own size in points (72 DPI)</param>
+    /// <param name="longSide">long side of the bitmap in pixels, at least</param>
+    /// <param name="fullDpi">resolution of the full size: the bitmap is at least that large too, and <paramref name="fullWidth"/> and
+    /// <paramref name="fullHeight"/> are the page at it; 0 = no full size (they are then the page at 72 DPI)</param>
     /// <param name="maxPixels">the bitmap is scaled down further to hold at most this many pixels (page sizes come from the file)</param>
-    public static SKBitmap RenderPage(byte[] pdf, int pageIndex, int longSide, long maxPixels, out int fullWidth, out int fullHeight, out int pageCount)
+    /// <exception cref="OperationCanceledException">The call was cancelled while the page was being drawn.</exception>
+    public static unsafe SKBitmap RenderPage(byte[] pdf, int pageIndex, int longSide, double fullDpi, long maxPixels, out int fullWidth, out int fullHeight, out int pageCount)
     {
         var pin = GCHandle.Alloc(pdf, GCHandleType.Pinned);
         try
@@ -210,19 +233,38 @@ internal static class Pdfium
                     {
                         float widthPt = FPDF_GetPageWidthF(page), heightPt = FPDF_GetPageHeightF(page);
                         if (!(widthPt > 0 && heightPt > 0)) throw new InvalidDataException($"PDF page {pageIndex + 1} has no size");
-                        fullWidth = (int)Math.Min(widthPt, int.MaxValue);
-                        fullHeight = (int)Math.Min(heightPt, int.MaxValue);
-                        var scale = longSide > 0 ? longSide / Math.Max(widthPt, heightPt) : 1f;
-                        if ((double)widthPt * heightPt * scale * scale > maxPixels) scale = (float)Math.Sqrt(maxPixels / ((double)widthPt * heightPt));
+                        var fullScale = fullDpi > 0 ? fullDpi / 72 : 1;
+                        fullWidth = (int)Math.Min(widthPt * fullScale, int.MaxValue);
+                        fullHeight = (int)Math.Min(heightPt * fullScale, int.MaxValue);
+                        var scale = Math.Max(longSide > 0 ? longSide / Math.Max(widthPt, heightPt) : 0f, fullDpi > 0 ? (float)fullScale : 0f);
+                        if (scale <= 0) scale = 1f;
+                        Func<double, double> round = Math.Round;
+                        if ((double)widthPt * heightPt * scale * scale > maxPixels)
+                        {
+                            scale = (float)Math.Sqrt(maxPixels / ((double)widthPt * heightPt));
+                            round = v => Math.Floor(v + 1e-3);   // so that the bitmap really holds at most maxPixels
+                        }
                         // a very long, thin page still gets one pixel across
-                        var bitmap = new SKBitmap(new SKImageInfo(Math.Max(1, (int)Math.Round(widthPt * scale)), Math.Max(1, (int)Math.Round(heightPt * scale)), SKColorType.Bgra8888, SKAlphaType.Premul));
+                        var bitmap = new SKBitmap(new SKImageInfo(Math.Max(1, (int)round(widthPt * scale)), Math.Max(1, (int)round(heightPt * scale)), SKColorType.Bgra8888, SKAlphaType.Premul));
                         // render straight into the Skia pixel buffer: no intermediate copy or encode
                         var target = FPDFBitmap_CreateEx(bitmap.Width, bitmap.Height, FormatBgra, bitmap.GetPixels(), bitmap.RowBytes);
                         try
                         {
                             FPDFBitmap_FillRect(target, 0, 0, bitmap.Width, bitmap.Height, 0xFFFFFFFF);
-                            FPDF_RenderPageBitmap(target, page, 0, 0, bitmap.Width, bitmap.Height, 0, FlagAnnotations);
+                            // drawn progressively so that a cancelled call stops mid-page and lets go of the lock
+                            var pause = new Pause { Version = 1, NeedToPauseNow = &NeedToPauseNow };
+                            try
+                            {
+                                var status = FPDF_RenderPageBitmap_Start(target, page, 0, 0, bitmap.Width, bitmap.Height, 0, FlagAnnotations, &pause);
+                                while (status == RenderToBeContinued)
+                                {
+                                    Guard.Check();
+                                    status = FPDF_RenderPage_Continue(page, &pause);
+                                }
+                            }
+                            finally { FPDF_RenderPage_Close(page); }
                         }
+                        catch { bitmap.Dispose(); throw; }
                         finally { FPDFBitmap_Destroy(target); }
                         return bitmap;
                     }

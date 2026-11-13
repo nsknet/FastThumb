@@ -34,6 +34,22 @@ internal static class PdfFiles
         return Write(objects, objects.Count);
     }
 
+    /// <summary>A one-page Letter PDF whose page is slow to draw: <paramref name="strokes"/> stroked lines across it.</summary>
+    public static byte[] SlowPdf(int strokes)
+    {
+        var content = new StringBuilder("0.5 w\n");
+        var random = new Random(1);
+        for (var i = 0; i < strokes; i++)
+            content.Append(CultureInfo.InvariantCulture, $"{random.Next(612)} {random.Next(792)} m {random.Next(612)} {random.Next(792)} l S\n");
+        var text = content.ToString();
+        return Write([
+            "<< /Type /Catalog /Pages 2 0 R >>",
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>",
+            $"<< /Length {Encoding.ASCII.GetByteCount(text)} >>\nstream\n{text}endstream",
+        ]);
+    }
+
     private static byte[] Write(List<string> objects, int? infoId = null)
     {
         var output = new StringBuilder("%PDF-1.4\n%âãÏÓ\n");
