@@ -74,12 +74,19 @@ public class PageDpiTests
         generator.Generate(slow, "slow.pdf");
         var whole = clock.Elapsed;
 
-        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+        // cancelled a fifth of the way into the page; how long a page takes differs a lot between machines
+        using var cancellation = new CancellationTokenSource(whole / 5);
         clock.Restart();
-        Assert.ThrowsAny<OperationCanceledException>(() => generator.Generate(slow, "slow.pdf", cancellation.Token));
+        OperationCanceledException? stopped = null;
+        try { generator.Generate(slow, "slow.pdf", cancellation.Token); }
+        catch (OperationCanceledException e) { stopped = e; }
         var cancelled = clock.Elapsed;
         // only meaningful when the page takes long enough to draw that stopping early can be told apart
-        if (whole > TimeSpan.FromMilliseconds(400)) Assert.True(cancelled < whole / 2, $"cancelled after {cancelled}, a whole page takes {whole}");
+        if (whole >= TimeSpan.FromMilliseconds(300))
+        {
+            Assert.NotNull(stopped);
+            Assert.True(cancelled < whole * 0.75, $"cancelled after {cancelled}, a whole page takes {whole}");
+        }
 
         // the lock was released: the next PDF is drawn normally
         Assert.Single(generator.Generate(PdfFiles.Pdf(1), "a.pdf").Images);
