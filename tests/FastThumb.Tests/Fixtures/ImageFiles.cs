@@ -21,6 +21,9 @@ internal static class ImageFiles
         return marked.Copy(interpretation: Enums.Interpretation.Srgb);
     }
 
+    /// <summary>The test picture as raw interleaved RGB bytes, top row first: the input of the hand-written formats.</summary>
+    public static byte[] Rgb(int width = 320, int height = 200) { using var image = Picture(width, height); return image.WriteToMemory<byte>(); }
+
     public static byte[] Png(int width = 320, int height = 200) { using var image = Picture(width, height); return image.WriteToBuffer(".png"); }
 
     public static byte[] Jpeg(int width = 320, int height = 200) { using var image = Picture(width, height); return image.WriteToBuffer(".jpg"); }

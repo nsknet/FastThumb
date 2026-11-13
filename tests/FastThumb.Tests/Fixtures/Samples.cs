@@ -34,10 +34,11 @@ internal static class Samples
     public static readonly Sample Png = new("png", "test.png", DocumentFormat.Image, 1, false, () => ImageFiles.Png());
     public static readonly Sample Jpeg = new("jpeg", "test.jpg", DocumentFormat.Image, 1, false, () => ImageFiles.Jpeg());
     public static readonly Sample WebP = new("webp", "test.webp", DocumentFormat.Image, 1, false, () => ImageFiles.WebP());
+    public static readonly Sample Tga = new("tga", "test.tga", DocumentFormat.Image, 1, false, () => RasterFiles.Tga());
     public static readonly Sample Svg = new("svg", "test.svg", DocumentFormat.Image, 1, false, () => System.Text.Encoding.UTF8.GetBytes(TextFiles.Svg()));
 
     public static IReadOnlyList<Sample> All { get; } =
-        [Docx, Docx3, Xlsx, Pptx, Odt, Ods, Rtf, Html, Csv, Markdown, Text, Pdf, Pdf3, Png, Jpeg, WebP, Svg];
+        [Docx, Docx3, Xlsx, Pptx, Odt, Ods, Rtf, Html, Csv, Markdown, Text, Pdf, Pdf3, Png, Jpeg, WebP, Svg, Tga];
 
     public static IReadOnlyList<Sample> Documents { get; } = All.Where(s => s.Paginated).ToList();
 
@@ -45,7 +46,7 @@ internal static class Samples
 
     public static IEnumerable<object[]> DocumentData => Documents.Select(s => new object[] { s.Name });
 
-    public static IEnumerable<object[]> RasterImageData => new[] { Png, Jpeg, WebP }.Select(s => new object[] { s.Name });
+    public static IEnumerable<object[]> RasterImageData => new[] { Png, Jpeg, WebP, Tga }.Select(s => new object[] { s.Name });
 
     /// <summary>Theories take the name (a stable, serialisable test case id) and look the sample up.</summary>
     public static Sample Get(string name) => All.Single(s => s.Name == name);

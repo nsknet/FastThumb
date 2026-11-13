@@ -27,6 +27,7 @@ internal static class FormatDetector
         ".xls", ".xlsx", ".xlsm", ".xltx", ".xlsb", ".csv", ".tsv", ".ods",
         ".xps", ".oxps",
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".tif", ".tiff", ".heic", ".heif", ".avif", ".bmp", ".svg", ".ico",
+        ".tga",
         ".mp4", ".m4v", ".mov", ".3gp", ".3g2", ".f4v", ".mkv", ".webm", ".avi", ".flv", ".asf", ".wmv", ".mpg", ".mpeg", ".mpe", ".m2v",
         ".vob", ".m2ts", ".ogv", ".ogg", ".rm", ".rmvb", ".mxf", ".vivo", ".viv", ".roq",
     };
@@ -104,8 +105,9 @@ internal static class FormatDetector
         if (d[0] == 'G' && d[1] == 'I' && d[2] == 'F' && d[3] == '8') return true;                               // GIF
         if ((d[0] == 'I' && d[1] == 'I' && d[2] == 42 && d[3] == 0) || (d[0] == 'M' && d[1] == 'M' && d[2] == 0 && d[3] == 42)) return true; // TIFF
         if (d[0] == 'R' && d[1] == 'I' && d[2] == 'F' && d[3] == 'F' && d[8] == 'W' && d[9] == 'E' && d[10] == 'B' && d[11] == 'P') return true; // WebP
-        if (d[4] == 'f' && d[5] == 't' && d[6] == 'y' && d[7] == 'p')                                           // ISO media: only the still-image brands
-            return Encoding.ASCII.GetString(d.Slice(8, 4)) is "heic" or "heix" or "hevc" or "mif1" or "msf1" or "avif" or "avis";
+        if (d[4] == 'f' && d[5] == 't' && d[6] == 'y' && d[7] == 'p'                                            // ISO media: only the still-image brands
+            && Encoding.ASCII.GetString(d.Slice(8, 4)) is "heic" or "heix" or "hevc" or "mif1" or "msf1" or "avif" or "avis") return true;
+        if (Images.ManagedImages.Claims(d, extension)) return true;                                              // PSD, TGA, EPS, RAW, JPEG 2000
         return (extension ?? "").ToLowerInvariant() is ".bmp" or ".svg" or ".ico";   // only what libvips (svg) or Skia (bmp, ico) can actually decode
     }
 

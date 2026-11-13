@@ -30,7 +30,7 @@ internal static class Inspector
             case DocumentFormat.Video:
                 using (var video = new MemoryStream(data, false)) return Video(video, options);
             case DocumentFormat.Image:
-                return Image(data);
+                return Image(data, extension);
             case DocumentFormat.Pdf:
                 return Pdf(data);
         }
@@ -74,9 +74,14 @@ internal static class Inspector
         };
     }
 
-    /// <summary>Only the header is read: libvips loads lazily, Skia's codec reads the header on creation.</summary>
-    private static DocumentInfo Image(byte[] data)
+    /// <summary>
+    /// Only the header is read: by the managed readers (PSD, TGA, EPS, RAW, JPEG 2000), else by libvips, which loads lazily,
+    /// or Skia's codec, which reads the header on creation.
+    /// </summary>
+    private static DocumentInfo Image(byte[] data, string? extension)
     {
+        if (Images.ManagedImages.Size(data, extension) is { } size)
+            return new DocumentInfo(DocumentFormat.Image) { PageCount = 1, Width = size.Width, Height = size.Height };
         int width, height;
         try
         {

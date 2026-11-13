@@ -59,7 +59,7 @@ internal static class Thumbnailer
         {
             if (!want.Picture) return Finish(new ThumbnailResult(format, 1, images, null, default), want, null);
             ThumbnailPlaceholder? placeholder;
-            using (var original = Decode(data, options.Limits.MaxPixels)) placeholder = EncodeImage(original, images, options, want);
+            using (var original = Decode(data, extension, new(options.Limits.MaxPixels, BigEnough(options, want)))) placeholder = EncodeImage(original, images, options, want);
             return Finish(new ThumbnailResult(format, 1, images, null, new(TimeSpan.Zero, TimeSpan.Zero, clock.Elapsed)), want, placeholder);
         }
 
@@ -180,6 +180,31 @@ internal static class Thumbnailer
             longest = Math.Max(longest, scale * Math.Max(pageWidth, pageHeight));
         }
         return (int)Math.Min(65500, Math.Ceiling(longest));
+    }
+
+    /// <summary>
+    /// Whether a picture of a given size still gives every requested output as the full picture would: the full size needs
+    /// every pixel; each size needs its long side (Fit) or its whole box (Cover); a placeholder needs 100 px.
+    /// Only decoders that can decode at a reduced size use it (JPEG 2000).
+    /// </summary>
+    private static Func<int, int, bool> BigEnough(ThumbnailOptions options, Wanted want)
+    {
+        if (want.Images && options.IncludeFullSize) return static (_, _) => false;
+        var sizes = want.Images ? options.Sizes.ToArray() : [];
+        var placeholder = want.Placeholder;
+        var cover = options.Fit == ThumbnailFit.Cover;
+        var aspect = options.AspectRatio;
+        return (width, height) =>
+        {
+            if (placeholder && Math.Max(width, height) < PlaceholderSide) return false;
+            foreach (var size in sizes)
+            {
+                if (!cover) { if (Math.Max(width, height) < size) return false; continue; }
+                var (boxWidth, boxHeight) = CoverBox(size, aspect);
+                if (width < boxWidth || height < boxHeight) return false;
+            }
+            return true;
+        };
     }
 
     /// <summary>The box of one size for <see cref="ThumbnailFit.Cover"/>: its longer side is the size.</summary>
@@ -305,11 +330,14 @@ internal static class Thumbnailer
     }
 
     /// <summary>
-    /// libvips first; Skia covers the few formats this libvips build has no loader for (BMP, ICO). Both read the header before
-    /// any pixel, so a picture declaring more than <paramref name="maxPixels"/> is refused before it is decoded.
+    /// The formats read in managed code first (PSD, TGA, EPS, RAW, JPEG 2000), then libvips; Skia covers the few formats this
+    /// libvips build has no loader for (BMP, ICO). All read the header before any pixel, so a picture declaring more than
+    /// MaxPixels is refused before it is decoded.
     /// </summary>
-    private static NetVips.Image Decode(byte[] data, long maxPixels)
+    private static NetVips.Image Decode(byte[] data, string? extension, Images.DecodeRequest request)
     {
+        if (Images.ManagedImages.Decode(data, extension, request) is { } managed) return managed;
+        var maxPixels = request.MaxPixels;
         NetVips.Image? image = null;
         try { image = NetVips.Image.NewFromBuffer(data); }        // lazy: only the header so far
         catch (NetVips.VipsException e)
