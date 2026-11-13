@@ -29,7 +29,7 @@ internal readonly record struct DecodeRequest(long MaxPixels, Func<int, int, boo
 /// </summary>
 internal static class ManagedImages
 {
-    private enum Kind { None, Tga, Psd, Eps, Raw }
+    private enum Kind { None, Tga, Psd, Eps, Raw, Jpeg2000 }
 
     /// <summary>
     /// A format read here, from its signature (TGA has none: its extension, or the TGA 2.0 footer). <paramref name="d"/> may be
@@ -44,6 +44,7 @@ internal static class ManagedImages
         Kind.Psd => Run(() => PsdDecoder.Decode(data, request)),
         Kind.Eps => Run(() => EpsPreview.Decode(data, request)),
         Kind.Raw => OrTiff(data, () => Run(() => RawPreview.Decode(data, request))),
+        Kind.Jpeg2000 => Run(() => Jpeg2000.Jpeg2000Decoder.Decode(data, request)),
         _ => null,
     };
 
@@ -54,12 +55,14 @@ internal static class ManagedImages
         Kind.Psd => Run(() => PsdDecoder.Size(data)),
         Kind.Eps => Run(() => EpsPreview.Size(data)),
         Kind.Raw => OrTiff<(int, int)?>(data, () => Run(() => RawPreview.Size(data))),
+        Kind.Jpeg2000 => Run(() => Jpeg2000.Jpeg2000Decoder.Size(data)),
         _ => null,
     };
 
     private static Kind Find(ReadOnlySpan<byte> d, string? extension)
     {
         if (PsdDecoder.Claims(d)) return Kind.Psd;
+        if (Jpeg2000.Jpeg2000Decoder.Claims(d)) return Kind.Jpeg2000;
         if (EpsPreview.Claims(d, extension)) return Kind.Eps;
         if (RawPreview.Claims(d, extension)) return Kind.Raw;
         if (TgaDecoder.Claims(d, extension)) return Kind.Tga;
@@ -81,7 +84,7 @@ internal static class ManagedImages
     {
         try { return read(); }
         catch (Exception e) when (e is IndexOutOfRangeException or ArgumentException or OverflowException or EndOfStreamException
-            or FormatException or InvalidCastException or DivideByZeroException)
+            or FormatException or InvalidCastException or DivideByZeroException or InvalidOperationException or NullReferenceException)
         {
             throw new InvalidDocumentException($"The image is damaged ({e.GetType().Name}: {e.Message})", e);
         }

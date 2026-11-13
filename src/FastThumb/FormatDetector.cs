@@ -27,7 +27,7 @@ internal static class FormatDetector
         ".xls", ".xlsx", ".xlsm", ".xltx", ".xlsb", ".csv", ".tsv", ".ods",
         ".xps", ".oxps",
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".tif", ".tiff", ".heic", ".heif", ".avif", ".bmp", ".svg", ".ico",
-        ".psd", ".psb", ".tga", ".eps", ".epsf", ".epsi",
+        ".psd", ".psb", ".tga", ".eps", ".epsf", ".epsi", ".jp2", ".j2k", ".j2c", ".jpf", ".jpx",
         ".cr2", ".cr3", ".nef", ".nrw", ".arw", ".srf", ".sr2", ".dng", ".orf", ".rw2", ".raf", ".pef", ".srw", ".erf", ".3fr",
         ".mp4", ".m4v", ".mov", ".3gp", ".3g2", ".f4v", ".mkv", ".webm", ".avi", ".flv", ".asf", ".wmv", ".mpg", ".mpeg", ".mpe", ".m2v",
         ".vob", ".m2ts", ".ogv", ".ogg", ".rm", ".rmvb", ".mxf", ".vivo", ".viv", ".roq",
