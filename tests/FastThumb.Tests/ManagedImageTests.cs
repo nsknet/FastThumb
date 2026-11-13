@@ -100,4 +100,76 @@ public class ManagedImageTests
         tga[2] = 7;   // no such image type
         Assert.Throws<InvalidDocumentException>(() => Generator.Generate(tga, "bad.tga"));
     }
+
+    // ---- PSD -------------------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(3, 8, 0, false)]
+    [InlineData(3, 8, 1, false)]
+    [InlineData(3, 8, 2, false)]
+    [InlineData(3, 8, 3, false)]
+    [InlineData(3, 16, 1, false)]
+    [InlineData(3, 16, 3, false)]
+    [InlineData(3, 8, 1, true)]
+    [InlineData(3, 16, 1, true)]
+    [InlineData(4, 8, 1, false)]
+    [InlineData(4, 16, 0, true)]
+    public void Psd_colour_composite_is_exact(int mode, int depth, int compression, bool large)
+    {
+        var psd = RasterFiles.Psd(mode: mode, depth: depth, compression: compression, large: large);
+        Assert.Equal(0, Difference(psd, null, Same));
+        Assert.Equal(3, Pixels(psd, null).Bands);
+    }
+
+    [Theory]
+    [InlineData(1, 8, 1)]
+    [InlineData(1, 16, 0)]
+    [InlineData(2, 8, 1)]
+    [InlineData(2, 8, 2)]
+    public void Psd_grey_and_indexed_composite_is_exact(int mode, int depth, int compression) =>
+        Assert.Equal(0, Difference(RasterFiles.Psd(mode: mode, depth: depth, compression: compression), null, Red));
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void Psd_bitmap_is_black_where_set(int compression) =>
+        Assert.Equal(0, Difference(RasterFiles.Psd(mode: 0, depth: 1, compression: compression), null, (r, _, _) => r < 128 ? ((byte)0, (byte)0, (byte)0) : ((byte)255, (byte)255, (byte)255)));
+
+    [Fact]
+    public void Psd_alpha_is_used_only_when_the_layer_count_says_so()
+    {
+        var (pixels, bands, _, _) = Pixels(RasterFiles.Psd(alpha: true), null);
+        Assert.Equal(4, bands);
+        Assert.Equal(128, pixels[3]);
+        var grey = Pixels(RasterFiles.Psd(mode: 1, alpha: true, large: true), null);
+        Assert.Equal(2, grey.Bands);
+        Assert.Equal(128, grey.Pixels[1]);
+    }
+
+    [Fact]
+    public void Psd_32_bit_falls_back_to_its_thumbnail()
+    {
+        var psd = RasterFiles.Psd(depth: 32, compression: 0, thumbnail: ImageFiles.Jpeg(160, 100));
+        Assert.Equal((160, 100), (Pixels(psd, null).Width, Pixels(psd, null).Height));
+        Assert.Equal((320, 200), (Generator.Inspect(psd).Width, Generator.Inspect(psd).Height));
+        Assert.Throws<UnsupportedFormatException>(() => Generator.Generate(RasterFiles.Psd(depth: 32, compression: 0), "no-thumbnail.psd"));
+    }
+
+    [Fact]
+    public void Psd_is_told_by_its_signature()
+    {
+        Assert.Equal(DocumentFormat.Image, ThumbnailGenerator.DetectFormat(RasterFiles.Psd(), null));
+        Assert.Equal(DocumentFormat.Image, ThumbnailGenerator.DetectFormat(RasterFiles.Psd(large: true), "misnamed.txt"));
+    }
+
+    [Fact]
+    public void Psd_declaring_a_huge_size_is_refused() =>
+        Assert.Throws<ResourceLimitExceededException>(() => Generator.Generate(RasterFiles.PsdHeaderOnly(300000, 300000), "huge.psd"));
+
+    [Fact]
+    public void Psd_rows_running_past_the_end_are_damaged()
+    {
+        var psd = RasterFiles.Psd(compression: 0);
+        Assert.Throws<InvalidDocumentException>(() => Generator.Generate(psd[..(psd.Length / 2)], "cut.psd"));
+    }
 }

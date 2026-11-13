@@ -29,7 +29,7 @@ internal readonly record struct DecodeRequest(long MaxPixels, Func<int, int, boo
 /// </summary>
 internal static class ManagedImages
 {
-    private enum Kind { None, Tga }
+    private enum Kind { None, Tga, Psd }
 
     /// <summary>
     /// A format read here, from its signature (TGA has none: its extension, or the TGA 2.0 footer). <paramref name="d"/> may be
@@ -41,6 +41,7 @@ internal static class ManagedImages
     public static NetVips.Image? Decode(byte[] data, string? extension, DecodeRequest request) => Find(data, extension) switch
     {
         Kind.Tga => Run(() => TgaDecoder.Decode(data, request)),
+        Kind.Psd => Run(() => PsdDecoder.Decode(data, request)),
         _ => null,
     };
 
@@ -48,11 +49,13 @@ internal static class ManagedImages
     public static (int Width, int Height)? Size(byte[] data, string? extension) => Find(data, extension) switch
     {
         Kind.Tga => Run(() => TgaDecoder.Size(data)),
+        Kind.Psd => Run(() => PsdDecoder.Size(data)),
         _ => null,
     };
 
     private static Kind Find(ReadOnlySpan<byte> d, string? extension)
     {
+        if (PsdDecoder.Claims(d)) return Kind.Psd;
         if (TgaDecoder.Claims(d, extension)) return Kind.Tga;
         return Kind.None;
     }
