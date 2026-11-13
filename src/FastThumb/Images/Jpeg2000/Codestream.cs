@@ -43,12 +43,25 @@ internal sealed class TileParameters
     public CodingStyle[] Styles = [];
     public Quantization[] Quantizations = [];
     public int[] RoiShift = [];
+
+    /// <summary>Progression order changes (POC), in order: resolutions [Rs, Re), components [Cs, Ce), layers below Le.</summary>
+    public List<(int Rs, int Cs, int Le, int Re, int Ce, int Progression)> Changes = [];
+}
+
+/// <summary>One tile of the codestream: its parameters, where its packet data is, and its packed packet headers if any.</summary>
+internal sealed class Tile(TileParameters parameters)
+{
+    public TileParameters Parameters { get; } = parameters;
+    public List<(int Start, int Length)> Parts { get; } = [];
+
+    /// <summary>The packet headers of the tile when they are packed in PPM or PPT markers instead of in the packet data.</summary>
+    public MemoryStream? Headers { get; set; }
 }
 
 /// <summary>
 /// The codestream, located: the image and tile grid (SIZ), the coding parameters of every tile, and each tile's packet data
-/// (its tile-parts, concatenated). Nothing is decoded here. POC, PPM and PPT (progression changes, packed packet headers) are
-/// refused: they are rare outside digital cinema, and decoding them would double the packet code.
+/// (its tile-parts, concatenated), with the progression order changes (POC) and the packed packet headers (PPM in the main
+/// header, PPT in tile-part headers) that apply to it. Nothing is decoded here.
 /// </summary>
 internal sealed class Codestream
 {
@@ -56,7 +69,7 @@ internal sealed class Codestream
     public int TileWidth, TileHeight, TileX0, TileY0;
     public int TilesAcross, TilesDown;
     public Component[] Components = [];
-    public readonly Dictionary<int, (TileParameters Parameters, List<(int Start, int Length)> Parts)> Tiles = [];
+    public readonly Dictionary<int, Tile> Tiles = [];
 
     private byte[] _data = [];
 
@@ -90,9 +103,13 @@ internal sealed class Codestream
             if (BinaryPrimitives.ReadUInt16BigEndian(data.AsSpan(at)) == 0xFF90) break;
             if (Reserved(data, at)) { at += 2; continue; }
             var (marker, segment) = stream.Segment(ref at, end);
-            stream.Read(main, marker, stream.Content(segment));
+            stream.Read(main, marker, stream.Content(segment), segment.Start);
         }
         if (main.Cod == null || main.Qcd == null) throw new InvalidDocumentException("The JPEG 2000 main header has no COD or QCD marker.");
+
+        // PPM: the packet headers of every tile-part, in codestream order, each run preceded by its length (Nppm)
+        var packed = main.Packed.Count == 0 ? null : Concatenate(data, main.Packed);
+        var packedAt = 0;
 
         // tile-parts: SOT, the tile-part header, SOD, packet data up to the length SOT gives
         while (at + 12 <= end && BinaryPrimitives.ReadUInt16BigEndian(data.AsSpan(at)) == 0xFF90)
@@ -111,20 +128,47 @@ internal sealed class Codestream
             {
                 if (Reserved(data, at)) { at += 2; continue; }
                 var (marker, header) = stream.Segment(ref at, partEnd);
-                stream.Read(own, marker, stream.Content(header));
+                stream.Read(own, marker, stream.Content(header), header.Start);
             }
             at += 2;                                                        // SOD
             if (!stream.Tiles.TryGetValue(tile, out var entry))
             {
-                // the coding markers of a tile are in its first tile-part
-                entry = (stream.Resolve(main, own), []);
+                // the coding markers of a tile are in its first tile-part; progression changes may follow in later ones
+                entry = new Tile(stream.Resolve(main, own));
                 stream.Tiles[tile] = entry;
+            }
+            else entry.Parameters.Changes.AddRange(own.Changes);
+            if (packed != null && packedAt + 4 <= packed.Length)
+            {
+                var count = (int)Math.Min(BinaryPrimitives.ReadUInt32BigEndian(packed.AsSpan(packedAt)), (uint)(packed.Length - packedAt - 4));
+                (entry.Headers ??= new MemoryStream()).Write(packed, packedAt + 4, count);
+                packedAt += 4 + count;
+            }
+            if (own.Packed.Count > 0)
+            {
+                var headers = Concatenate(data, own.Packed);
+                (entry.Headers ??= new MemoryStream()).Write(headers);
             }
             var dataEnd = length == 0 && partEnd >= 2 && BinaryPrimitives.ReadUInt16BigEndian(data.AsSpan(partEnd - 2)) == 0xFFD9 ? partEnd - 2 : partEnd;
             if (dataEnd > at) entry.Parts.Add((at, dataEnd - at));
             at = partEnd;
         }
         return stream;
+    }
+
+    /// <summary>The contents of PPM or PPT markers, in the order of their index (Zppm, Zppt).</summary>
+    private static byte[] Concatenate(byte[] data, List<(int Index, int Start, int Length)> segments)
+    {
+        var total = segments.Sum(s => (long)s.Length);
+        if (total > Guard.MaxPartBytes) throw new ResourceLimitExceededException("The JPEG 2000 packed packet headers are too large.");
+        var result = new byte[total];
+        var at = 0;
+        foreach (var (_, start, length) in segments.OrderBy(s => s.Index))
+        {
+            Buffer.BlockCopy(data, start, result, at, length);
+            at += length;
+        }
+        return result;
     }
 
     /// <summary>0xFF30 to 0xFF3F: reserved markers with no segment, which a decoder skips (A.1.4).</summary>
@@ -177,9 +221,12 @@ internal sealed class Codestream
         public Quantization? Qcd;
         public readonly Quantization?[] Qcc = new Quantization?[components];
         public readonly int?[] Roi = new int?[components];
+        public readonly List<(int Rs, int Cs, int Le, int Re, int Ce, int Progression)> Changes = [];
+        public readonly List<(int Index, int Start, int Length)> Packed = [];
     }
 
-    private void Read(Pieces pieces, int marker, ReadOnlySpan<byte> s)
+    /// <summary>One marker segment of a header; <paramref name="start"/> is where its content is in the file.</summary>
+    private void Read(Pieces pieces, int marker, ReadOnlySpan<byte> s, int start)
     {
         var wide = Components.Length >= 257;
         int ComponentIndex(ref ReadOnlySpan<byte> rest)
@@ -223,10 +270,26 @@ internal sealed class Codestream
                     pieces.Roi[c] = rest[1];
                     break;
                 }
-            case 0xFF5F:
-                throw new UnsupportedFormatException("JPEG 2000 progression order changes (POC) are not supported.");
-            case 0xFF60 or 0xFF61:
-                throw new UnsupportedFormatException("JPEG 2000 packed packet headers (PPM, PPT) are not supported.");
+            case 0xFF5F:                                                     // POC
+                {
+                    var size = wide ? 9 : 7;
+                    for (var at = 0; at + size <= s.Length; at += size)
+                    {
+                        var e = s[at..];
+                        int cs = wide ? BinaryPrimitives.ReadUInt16BigEndian(e[1..]) : e[1];
+                        var rest = e[(wide ? 3 : 2)..];
+                        int ce = wide ? BinaryPrimitives.ReadUInt16BigEndian(rest[3..]) : rest[3];
+                        if (ce == 0) ce = wide ? 16384 : 256;               // 0 stands for the largest value
+                        var progression = rest[wide ? 5 : 4];
+                        if (progression > 4) throw new InvalidDocumentException("A JPEG 2000 progression order change is not valid.");
+                        pieces.Changes.Add((e[0], cs, BinaryPrimitives.ReadUInt16BigEndian(rest), rest[2], ce, progression));
+                    }
+                    break;
+                }
+            case 0xFF60 or 0xFF61:                                           // PPM, PPT: an index, then packed packet headers
+                if (s.Length >= 1)
+                    pieces.Packed.Add((s[0], start + 1, s.Length - 1));
+                break;
         }
     }
 
@@ -293,6 +356,7 @@ internal sealed class Codestream
             Styles = new CodingStyle[Components.Length],
             Quantizations = new Quantization[Components.Length],
             RoiShift = new int[Components.Length],
+            Changes = [.. tile.Changes.Count > 0 ? tile.Changes : main.Changes],
         };
         if (parameters.Progression > 4) throw new InvalidDocumentException("The JPEG 2000 progression order is not valid.");
         if (parameters.Layers == 0) throw new InvalidDocumentException("The JPEG 2000 image declares no quality layer.");

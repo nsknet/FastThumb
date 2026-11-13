@@ -2,6 +2,10 @@
 resolution reduction (name.rN.png), which the managed decoder is compared with. FastThumb has no JPEG 2000 encoder, so these are
 committed. The picture is drawn here (gradients, shapes, fine stripes) so no third-party image is needed.
 
+Three codestreams of the JPEG 2000 conformance suite (ITU-T T.803 | ISO/IEC 15444-4) are downloaded from openjpeg-data for
+what neither encoder writes: progression order changes (POC) and packed packet headers (PPM, PPT). Their copyright notice is
+kept next to them, as it asks.
+
 Requires Pillow built with OpenJPEG; ffmpeg (its native jpeg2000 encoder) for the files written by a second encoder.
     python tests/fixtures/make-jpeg2000.py
 """
@@ -10,10 +14,12 @@ import os
 import shutil
 import subprocess
 import tempfile
+import urllib.request
 
 from PIL import Image, ImageDraw
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "jpeg2000")
+CONFORMANCE = "https://raw.githubusercontent.com/uclouvain/openjpeg-data/master/input/conformance/"
 
 
 def picture(width, height, mode="RGB"):
@@ -115,6 +121,13 @@ def main():
                last=2)   # below that, Pillow places the subsampled chroma of the second tile row a row off
     else:
         print("ffmpeg not found: the ffmpeg-*.j2k/jp2 files were not written")
+
+    # conformance codestreams: POC in a tile-part header, PPM, PPT
+    urllib.request.urlretrieve(CONFORMANCE + "COPYRIGHT", os.path.join(OUT, "conformance-COPYRIGHT.txt"))
+    # e1 has an odd image offset, where Pillow's reduced sizes are a row or column off: its full size only
+    for name, last in (("e1_colr.j2c", 0), ("g1_colr.j2c", 99), ("p1_06.j2k", 99)):
+        urllib.request.urlretrieve(CONFORMANCE + name, os.path.join(OUT, name))
+        references(name, last=last)
 
     for file in sorted(os.listdir(OUT)):
         print(f"{os.path.getsize(os.path.join(OUT, file)):8d}  {file}")

@@ -79,9 +79,12 @@ internal sealed class TileDecoder
     private readonly Budget _budget;
     private readonly TileComponent[] _components;
     private readonly int _x0, _y0, _x1, _y1;
+    private readonly byte[]? _headers;
 
-    public TileDecoder(Codestream stream, int tile, TileParameters parameters, byte[] data, int start, int end, int reduce, Budget budget)
+    /// <param name="headers">The tile's packed packet headers (PPM, PPT), or null when they are in the packet data.</param>
+    public TileDecoder(Codestream stream, int tile, TileParameters parameters, byte[] data, int start, int end, byte[]? headers, int reduce, Budget budget)
     {
+        _headers = headers;
         _stream = stream;
         _parameters = parameters;
         _data = data;
@@ -236,23 +239,28 @@ internal sealed class TileDecoder
 
     private void ReadPackets()
     {
-        var reader = new PacketReader(_data, _start, _end);
+        var body = new PacketReader(_data, _start, _end);
+        var header = _headers == null ? body : new PacketReader(_headers, 0, _headers.Length);
         var pending = new List<(Segment Segment, int Length)>();
         try
         {
             foreach (var (layer, r, c, k) in Order())
             {
-                if (reader.AtEnd) break;
+                if (header.AtEnd) break;
                 if ((k & 255) == 0) Guard.Check();
-                ReadPacket(reader, pending, layer, r, c, k);
+                ReadPacket(header, body, pending, layer, r, c, k);
             }
         }
         catch (EndOfTile) { }   // the data ends early: the code-blocks keep what they received
     }
 
-    private void ReadPacket(PacketReader reader, List<(Segment Segment, int Length)> pending, int layer, int r, int c, int k)
+    /// <summary>
+    /// One packet: its header from <paramref name="reader"/> (the packet data, or the packed headers), its code-block data
+    /// from <paramref name="body"/>. SOP markers sit in the packet data, EPH markers after each header.
+    /// </summary>
+    private void ReadPacket(PacketReader reader, PacketReader body, List<(Segment Segment, int Length)> pending, int layer, int r, int c, int k)
     {
-        if (_parameters.Sop && reader.Next(0xFF91)) reader.Skip(6);
+        if (_parameters.Sop && body.Next(0xFF91)) body.Skip(6);
         if (reader.Bit() == 0)
         {
             reader.Align();
@@ -298,10 +306,10 @@ internal sealed class TileDecoder
         if (_parameters.Eph && reader.Next(0xFF92)) reader.Skip(2);
         foreach (var (segment, length) in pending)
         {
-            var available = Math.Min(length, reader.End - reader.Position);
-            if (available > 0) segment.Chunks.Add((reader.Position, available));
+            var available = Math.Min(length, body.End - body.Position);
+            if (available > 0) segment.Chunks.Add((body.Position, available));
             if (available < length) throw new EndOfTile();
-            reader.Skip(length);
+            body.Skip(length);
         }
     }
 
@@ -362,59 +370,87 @@ internal sealed class TileDecoder
         return precinct;
     }
 
-    /// <summary>Every packet of the tile as (layer, resolution, component, precinct), in the tile's progression order (B.12).</summary>
+    /// <summary>
+    /// Every packet of the tile as (layer, resolution, component, precinct), in its progression order (B.12), or in the order of
+    /// its progression order changes (POC, A.6.6), each with its range of resolutions, components and layers and followed by
+    /// the tile's own progression for whatever they leave out. A packet comes once, and the layers of a precinct in order.
+    /// </summary>
     private IEnumerable<(int Layer, int Resolution, int Component, int Precinct)> Order()
     {
-        var layers = _parameters.Layers;
         var resolutions = _components.Max(tc => tc.Resolutions.Length);
-        switch (_parameters.Progression)
+        var next = _components.Select(tc => tc.Resolutions.Select(r => new int[r.Precincts.Length]).ToArray()).ToArray();
+        var changes = _parameters.Changes.Append((0, 0, _parameters.Layers, resolutions, _components.Length, _parameters.Progression));
+        foreach (var (rs, cs, le, re, ce, progression) in changes)
+        {
+            var range = (Rs: rs, Re: Math.Min(re, resolutions), Cs: cs, Ce: Math.Min(ce, _components.Length), Le: Math.Min(le, _parameters.Layers));
+            foreach (var (l, r, c, k) in Progression(progression, range))
+            {
+                if (next[c][r][k] != l) continue;   // sent already, or a layer before it is still to come
+                next[c][r][k] = l + 1;
+                yield return (l, r, c, k);
+            }
+        }
+    }
+
+    /// <summary>The packets one progression order visits within a range (the caller keeps the layers of a precinct in turn).</summary>
+    private IEnumerable<(int Layer, int Resolution, int Component, int Precinct)> Progression(int progression, (int Rs, int Re, int Cs, int Ce, int Le) range)
+    {
+        bool Has(int c, int r) => r < _components[c].Resolutions.Length;
+        switch (progression)
         {
             case 0:                                                          // layer, resolution, component, position
-                for (var l = 0; l < layers; l++)
-                    for (var r = 0; r < resolutions; r++)
-                        for (var c = 0; c < _components.Length; c++)
-                            if (r < _components[c].Resolutions.Length)
+                for (var l = 0; l < range.Le; l++)
+                    for (var r = range.Rs; r < range.Re; r++)
+                        for (var c = range.Cs; c < range.Ce; c++)
+                            if (Has(c, r))
                                 for (var k = 0; k < _components[c].Resolutions[r].Precincts.Length; k++) yield return (l, r, c, k);
                 break;
             case 1:                                                          // resolution, layer, component, position
-                for (var r = 0; r < resolutions; r++)
-                    for (var l = 0; l < layers; l++)
-                        for (var c = 0; c < _components.Length; c++)
-                            if (r < _components[c].Resolutions.Length)
+                for (var r = range.Rs; r < range.Re; r++)
+                    for (var l = 0; l < range.Le; l++)
+                        for (var c = range.Cs; c < range.Ce; c++)
+                            if (Has(c, r))
                                 for (var k = 0; k < _components[c].Resolutions[r].Precincts.Length; k++) yield return (l, r, c, k);
                 break;
             default:
-                {
-                    // position orders: each precinct is visited where it starts on the reference grid (or at the tile's edge)
-                    var precincts = new List<(int R, int C, int K, long X, long Y)>();
-                    for (var c = 0; c < _components.Length; c++)
-                    {
-                        var component = _stream.Components[c];
-                        var tc = _components[c];
-                        for (var r = 0; r < tc.Resolutions.Length; r++)
-                        {
-                            var res = tc.Resolutions[r];
-                            var n = tc.Style.Levels - r;
-                            for (var k = 0; k < res.Precincts.Length; k++)
-                            {
-                                long px = (res.X0 >> res.PrecinctWidth) + k % res.Across, py = (res.Y0 >> res.PrecinctHeight) + k / res.Across;
-                                precincts.Add((r, c, k, Math.Max(_x0, (long)component.Dx * (px << (res.PrecinctWidth + n))),
-                                    Math.Max(_y0, (long)component.Dy * (py << (res.PrecinctHeight + n)))));
-                            }
-                        }
-                    }
-                    Comparison<(int R, int C, int K, long X, long Y)> compare = _parameters.Progression switch
-                    {
-                        2 => (a, b) => a.R != b.R ? a.R.CompareTo(b.R) : a.Y != b.Y ? a.Y.CompareTo(b.Y) : a.X != b.X ? a.X.CompareTo(b.X) : a.C.CompareTo(b.C),
-                        3 => (a, b) => a.Y != b.Y ? a.Y.CompareTo(b.Y) : a.X != b.X ? a.X.CompareTo(b.X) : a.C != b.C ? a.C.CompareTo(b.C) : a.R.CompareTo(b.R),
-                        _ => (a, b) => a.C != b.C ? a.C.CompareTo(b.C) : a.Y != b.Y ? a.Y.CompareTo(b.Y) : a.X != b.X ? a.X.CompareTo(b.X) : a.R.CompareTo(b.R),
-                    };
-                    precincts.Sort(compare);
-                    foreach (var (r, c, k, _, _) in precincts)
-                        for (var l = 0; l < layers; l++) yield return (l, r, c, k);
-                    break;
-                }
+                foreach (var (r, c, k, _, _) in Positions(progression))
+                    if (r >= range.Rs && r < range.Re && c >= range.Cs && c < range.Ce)
+                        for (var l = 0; l < range.Le; l++) yield return (l, r, c, k);
+                break;
         }
+    }
+
+    private readonly Dictionary<int, List<(int R, int C, int K, long X, long Y)>> _positions = [];
+
+    /// <summary>Every precinct with where it starts on the reference grid (or at the tile's edge), sorted for a position order.</summary>
+    private List<(int R, int C, int K, long X, long Y)> Positions(int progression)
+    {
+        if (_positions.TryGetValue(progression, out var cached)) return cached;
+        var precincts = new List<(int R, int C, int K, long X, long Y)>();
+        for (var c = 0; c < _components.Length; c++)
+        {
+            var component = _stream.Components[c];
+            var tc = _components[c];
+            for (var r = 0; r < tc.Resolutions.Length; r++)
+            {
+                var res = tc.Resolutions[r];
+                var n = tc.Style.Levels - r;
+                for (var k = 0; k < res.Precincts.Length; k++)
+                {
+                    long px = (res.X0 >> res.PrecinctWidth) + k % res.Across, py = (res.Y0 >> res.PrecinctHeight) + k / res.Across;
+                    precincts.Add((r, c, k, Math.Max(_x0, (long)component.Dx * (px << (res.PrecinctWidth + n))),
+                        Math.Max(_y0, (long)component.Dy * (py << (res.PrecinctHeight + n)))));
+                }
+            }
+        }
+        Comparison<(int R, int C, int K, long X, long Y)> compare = progression switch
+        {
+            2 => (a, b) => a.R != b.R ? a.R.CompareTo(b.R) : a.Y != b.Y ? a.Y.CompareTo(b.Y) : a.X != b.X ? a.X.CompareTo(b.X) : a.C.CompareTo(b.C),
+            3 => (a, b) => a.Y != b.Y ? a.Y.CompareTo(b.Y) : a.X != b.X ? a.X.CompareTo(b.X) : a.C != b.C ? a.C.CompareTo(b.C) : a.R.CompareTo(b.R),
+            _ => (a, b) => a.C != b.C ? a.C.CompareTo(b.C) : a.Y != b.Y ? a.Y.CompareTo(b.Y) : a.X != b.X ? a.X.CompareTo(b.X) : a.R.CompareTo(b.R),
+        };
+        precincts.Sort(compare);
+        return _positions[progression] = precincts;
     }
 
     // ---- tier 1 and dequantization ---------------------------------------------------------------

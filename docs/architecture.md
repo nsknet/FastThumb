@@ -132,7 +132,8 @@ Formats the bundled libvips and Skia cannot read are tried first, in `Images/Man
   thumbnail; the largest baseline JPEG of a RAW file, from its TIFF tags (`TiffWalker`), the RAF header or a bounded
   scan of the file. libvips decodes that preview, and a RAW file's orientation is set on it for `Autorot`.
 - `Jpeg2000/` is a JPEG 2000 Part 1 decoder: codestream and tile-part headers (`Codestream`), packet headers with tag
-  trees in the five progression orders (`TileDecoder`), the MQ coder and the three coding passes (`MqDecoder`,
+  trees in the five progression orders and their changes (POC), read from the packet data or from packed headers (PPM,
+  PPT) (`TileDecoder`), the MQ coder and the three coding passes (`MqDecoder`,
   `Tier1`), and the inverse 5/3 and 9/7 wavelets (`Wavelet`). `Thumbnailer` passes a `DecodeRequest` that says how small
   a picture still serves every requested size, so only those wavelet levels are decoded, and tier 1 runs only for the
   code-blocks of those levels.

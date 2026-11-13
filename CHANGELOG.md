@@ -16,7 +16,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - **EPS**: the preview the file carries (the TIFF of a DOS EPS, EPSI, Illustrator's thumbnail).
   - **Camera RAW** (CR2, CR3, NEF, ARW, DNG, ORF, RW2, RAF, PEF and more): the largest JPEG preview, with the RAW file's
     orientation.
-  - **JPEG 2000** (JP2, J2K): a Part 1 decoder that decodes only the wavelet levels the requested sizes need.
+  - **JPEG 2000** (JP2, J2K): a Part 1 decoder (progression order changes and packed packet headers included) that
+    decodes only the wavelet levels the requested sizes need.
 
 ### Fixed
 

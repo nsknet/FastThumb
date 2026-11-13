@@ -99,9 +99,10 @@ internal static class Jpeg2000Decoder
         }
 
         var budget = new TileDecoder.Budget();
-        foreach (var (tile, (parameters, parts)) in stream.Tiles.OrderBy(t => t.Key))
+        foreach (var (tile, entry) in stream.Tiles.OrderBy(t => t.Key))
         {
             Guard.Check();
+            var (parameters, parts) = (entry.Parameters, entry.Parts);
             if (parts.Count == 0) continue;
             byte[] tileData;
             int tileStart, tileEnd;
@@ -113,7 +114,7 @@ internal static class Jpeg2000Decoder
                 foreach (var (partStart, length) in parts) { Buffer.BlockCopy(data, partStart, tileData, at, length); at += length; }
                 (tileStart, tileEnd) = (0, tileData.Length);
             }
-            var samples = new TileDecoder(stream, tile, parameters, tileData, tileStart, tileEnd, reduce, budget).Decode();
+            var samples = new TileDecoder(stream, tile, parameters, tileData, tileStart, tileEnd, entry.Headers?.ToArray(), reduce, budget).Decode();
             if (parameters.Transform) InverseTransform(samples, parameters.Styles[0].Reversible);
             for (var c = 0; c < count; c++)
             {

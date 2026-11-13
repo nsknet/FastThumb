@@ -120,6 +120,19 @@ public class Jpeg2000Tests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void Progression_order_changes_are_followed()
+    {
+        // the file is RLCP with three layers; the changes say: resolution 0 as LRCP (the same packets), then the rest as RLCP
+        var data = Jpeg2000Files.Read("layers-rlcp.j2k");
+        var sot = data.AsSpan().IndexOf([(byte)0xFF, (byte)0x90]);
+        byte[] poc = [0xFF, 0x5F, 0x00, 0x10, 0, 0, 0, 3, 1, 3, 0, 1, 0, 0, 3, 33, 3, 1];
+        var changed = data[..sot].Concat(poc).Concat(data[sot..]).ToArray();
+        using var expected = ManagedImages.Decode(data, null, DecodeRequest.Full(long.MaxValue))!;
+        using var actual = ManagedImages.Decode(changed, null, DecodeRequest.Full(long.MaxValue))!;
+        Assert.Equal(expected.WriteToMemory<byte>(), actual.WriteToMemory<byte>());
+    }
+
+    [Fact]
     public void A_cut_file_keeps_what_it_has()
     {
         var data = Jpeg2000Files.Read("lossless-lrcp.jp2");
@@ -127,13 +140,4 @@ public class Jpeg2000Tests(ITestOutputHelper output)
         Assert.Equal((320, 200), (result.FullSize!.Width, result.FullSize.Height));
     }
 
-    [Fact]
-    public void Progression_order_changes_are_refused_as_unsupported()
-    {
-        var data = HeaderOnly(64, 64, 1);
-        var sot = data.AsSpan().IndexOf([(byte)0xFF, (byte)0x90]);
-        byte[] poc = [0xFF, 0x5F, 0x00, 0x09, 0, 0, 0, 1, 1, 1, 0];
-        var withPoc = data[..sot].Concat(poc).Concat(data[sot..]).ToArray();
-        Assert.Throws<UnsupportedFormatException>(() => Generator.Generate(withPoc, "poc.j2k"));
-    }
 }
