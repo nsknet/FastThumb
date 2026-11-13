@@ -59,7 +59,7 @@ public enum DocumentFormat
     Xlsb,
     /// <summary>XML Paper Specification (.xps, .oxps).</summary>
     Xps,
-    /// <summary>Raster or vector image (JPEG, PNG, GIF, WebP, TIFF, HEIF/AVIF, SVG, BMP, ...).</summary>
+    /// <summary>Raster or vector image (JPEG, PNG, GIF, WebP, TIFF, HEIF/AVIF, SVG, BMP, PSD, TGA, EPS, camera RAW, JPEG 2000, ...).</summary>
     Image,
     /// <summary>Video (MP4/MOV, Matroska/WebM, AVI, MPEG-PS/TS, FLV, ASF/WMV, Ogg, ...).</summary>
     Video,

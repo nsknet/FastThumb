@@ -5,6 +5,23 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **More image formats**, read in managed code with no new dependency (the bundled libvips and Skia have no loader for
+  them):
+  - **PSD / PSB**: the composite image, in every common colour mode, 1 to 16 bits.
+  - **TGA**: colour-mapped, true-colour and greyscale, plain or run-length encoded.
+  - **EPS**: the preview the file carries (the TIFF of a DOS EPS, EPSI, Illustrator's thumbnail).
+  - **Camera RAW** (CR2, CR3, NEF, ARW, DNG, ORF, RW2, RAF, PEF and more): the largest JPEG preview, with the RAW file's
+    orientation.
+  - **JPEG 2000** (JP2, J2K): a Part 1 decoder that decodes only the wavelet levels the requested sizes need.
+
+### Fixed
+
+- CR3 files are no longer taken for videos, and ORF, RW2 and RAF files are no longer laid out as text.
+
 ## [1.2.0] - 2026-11-13
 
 ### Added

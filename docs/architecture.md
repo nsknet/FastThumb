@@ -124,6 +124,22 @@ size larger than the original yields the original.
 libvips' operation cache is turned off (every input is different, so it would only hold memory), and loaders that
 libvips marks as unsafe for untrusted input are blocked, except SVG, which is read from memory with no base URI.
 
+Formats the bundled libvips and Skia cannot read are tried first, in `Images/ManagedImages.cs`, from their signature
+(TGA from its extension or footer):
+
+- `TgaDecoder` and `PsdDecoder` decode pixels (the PSD composite image, not its layers).
+- `EpsPreview` and `RawPreview` find the preview the file carries: the TIFF of a DOS EPS, EPSI or Illustrator's
+  thumbnail; the largest baseline JPEG of a RAW file, from its TIFF tags (`TiffWalker`), the RAF header or a bounded
+  scan of the file. libvips decodes that preview, and a RAW file's orientation is set on it for `Autorot`.
+- `Jpeg2000/` is a JPEG 2000 Part 1 decoder: codestream and tile-part headers (`Codestream`), packet headers with tag
+  trees in the five progression orders (`TileDecoder`), the MQ coder and the three coding passes (`MqDecoder`,
+  `Tier1`), and the inverse 5/3 and 9/7 wavelets (`Wavelet`). `Thumbnailer` passes a `DecodeRequest` that says how small
+  a picture still serves every requested size, so only those wavelet levels are decoded, and tier 1 runs only for the
+  code-blocks of those levels.
+
+Each checks the declared size against `MaxPixels` before allocating pixels, and reports a damaged file as
+`InvalidDocumentException`.
+
 ## 8. Video input
 
 `Video/VideoFrame.cs` calls the `thumbvideo` native library (see [native.md](native.md) and

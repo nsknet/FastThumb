@@ -81,7 +81,8 @@ step, is in [docs/architecture.md](docs/architecture.md).
 - **One call, many outputs**: a full-size image plus any number of thumbnail sizes (by longest side), and a preview
   PDF of all pages, from one read of the input.
 - **Wide format coverage**: DOCX, DOC, RTF, ODT, HTML, MHTML, Markdown, text, EPUB, MOBI/AZW3, CHM, XLSX, XLSB, XLS,
-  ODS, CSV, PPTX, PPT, ODP, XPS, PDF, common image formats, and common video containers and codecs.
+  ODS, CSV, PPTX, PPT, ODP, XPS, PDF, common image formats plus PSD, TGA, EPS, camera RAW and JPEG 2000, and common
+  video containers and codecs.
   See [docs/formats.md](docs/formats.md).
 - **Content-based detection**: the format is recognised from the bytes; the file name only breaks ties between
   plain-text formats.
@@ -116,7 +117,7 @@ step, is in [docs/architecture.md](docs/architecture.md).
 | Spreadsheets | XLSX/XLSM/XLTX, XLSB, XLS (BIFF8), ODS/OTS, CSV/TSV |
 | Presentations | PPTX/PPTM/POTX/PPSX, PPT/PPS/POT, ODP/OTP, FODP |
 | Fixed layout | PDF, XPS/OXPS |
-| Images | JPEG, PNG, GIF, WebP, TIFF, HEIF/AVIF, SVG, BMP, ICO |
+| Images | JPEG, PNG, GIF, WebP, TIFF, HEIF/AVIF, SVG, BMP, ICO, PSD/PSB, TGA, EPS (its preview), camera RAW (its JPEG preview), JPEG 2000 |
 | Video | MP4/MOV/M4V/3GP, Matroska/WebM, AVI, FLV, ASF/WMV, MPEG-PS/TS, Ogg, RealMedia, MXF and more |
 
 The full list, with what is rendered and the known limitations of each reader, is in [docs/formats.md](docs/formats.md).
@@ -163,8 +164,8 @@ ThumbnailResult result = ThumbnailGenerator.Default.Generate(data, "budget.xlsx"
 ```
 
 The file name (or just an extension such as `".csv"`) is optional. It is only used to tell plain-text formats apart
-(CSV, Markdown, HTML, plain text) and to recognise a few formats that have no signature (BMP, ICO, SVG, some video
-containers).
+(CSV, Markdown, HTML, plain text) and to recognise a few formats that have no signature (BMP, ICO, SVG, TGA, some
+TIFF-based camera RAW files, some video containers).
 
 ### From a stream
 
@@ -259,7 +260,7 @@ DocumentInfo info = generator.InspectFile("report.pdf");
 | DOCX, XLSX, XLSB, PPTX | `docProps/core.xml`; the saved page count of a DOCX and slide count of a PPTX. |
 | ODT, ODS, ODP, FODP | `meta.xml`; the saved page count of an ODT. |
 | EPUB | Title, author, subject and dates of the package document. |
-| Image | Width and height from the header, after EXIF rotation. |
+| Image | Width and height from the header, after EXIF rotation (a camera RAW file: its preview; an EPS: its bounding box in points). |
 | Video | Width and height as displayed, duration and codec, from the first frame. |
 
 Other formats give the format alone. A damaged properties part leaves the properties `null` instead of failing.

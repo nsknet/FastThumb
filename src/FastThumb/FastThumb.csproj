@@ -11,7 +11,7 @@
 
     <PackageId>FastThumb</PackageId>
     <Description>Fast, in-process thumbnails and preview PDFs for office documents, spreadsheets, presentations, PDF, e-books, images and video. No Office, no LibreOffice, no external processes. Windows, Linux and macOS.</Description>
-    <PackageTags>thumbnail;preview;document;pdf;docx;xlsx;pptx;image;video;render</PackageTags>
+    <PackageTags>thumbnail;preview;document;pdf;docx;xlsx;pptx;image;psd;raw;jpeg2000;video;render</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 

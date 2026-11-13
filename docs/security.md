@@ -78,6 +78,11 @@ Attack surface is reduced by leaving code out:
 - **libvips**: loaders that libvips itself marks as unsuitable for untrusted input are blocked at start-up. SVG is
   the one exception: it is read from memory with no base URI, so it cannot reach other files, and its declared size
   goes through the `MaxPixels` check like any other image. libvips' operation cache is turned off.
+- **Managed image readers** for PSD, TGA, EPS, camera RAW and JPEG 2000 replace native loaders the bundled libvips
+  does not have (no ImageMagick, LibRaw or OpenJPEG is shipped). They are bounds-checked .NET code: every offset and
+  length is checked against the input, the declared size against `MaxPixels` before pixels are allocated, TIFF
+  directories are read once each, and a JPEG 2000 file is limited in tiles, precincts, packets and code-blocks.
+  Embedded JPEG and TIFF previews then go through libvips like any image.
 - **PDFium**: the build used has no V8 and no XFA, and FastThumb does not initialise form filling, so JavaScript in a
   PDF never runs. No password is ever supplied.
 - **thumbvideo** exports three functions only; all FFmpeg symbols are hidden. The Linux builds are compiled with
