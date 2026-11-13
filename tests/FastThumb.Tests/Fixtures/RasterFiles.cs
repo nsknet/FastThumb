@@ -7,7 +7,7 @@ namespace FastThumb.Tests.Fixtures;
 public enum TgaKind { Colour24, Colour32, Colour16, Grey8, Mapped8 }
 
 /// <summary>Where the generated EPS files keep their preview.</summary>
-public enum EpsKind { None, DosTiff, Epsi8, Epsi1, Illustrator, IllustratorRle }
+public enum EpsKind { None, DosTiff, Epsi8, Epsi1, Illustrator, IllustratorRle, Photoshop }
 
 /// <summary>The camera RAW layouts generated.</summary>
 public enum RawKind { Cr2, Nef, NefBigEndian, Dng, Orf, Rw2, Raf, Cr3, NoPreview }
@@ -48,7 +48,7 @@ internal static class RasterFiles
                 {
                     case TgaKind.Colour32: d[0] = b; d[1] = g; d[2] = r; d[3] = 255; break;
                     case TgaKind.Colour24: d[0] = b; d[1] = g; d[2] = r; break;
-                    case TgaKind.Colour16: BinaryPrimitives.WriteUInt16LittleEndian(d, (ushort)(0x8000 | (r >> 3) << 10 | (g >> 3) << 5 | b >> 3)); break;
+                    case TgaKind.Colour16: BinaryPrimitives.WriteUInt16LittleEndian(d, (ushort)((r >> 3) << 10 | (g >> 3) << 5 | b >> 3)); break;
                     default: d[0] = r; break;
                 }
             }
@@ -293,6 +293,23 @@ internal static class RasterFiles
                     text.Append("%%EndPreview\n");
                     break;
                 }
+            case EpsKind.Photoshop:
+                {
+                    // image resources in hex, as Photoshop writes them: one 1036 resource holding a 160 x 100 JPEG thumbnail
+                    var jpeg = ImageFiles.BareJpeg(160, 100);
+                    var resource = new List<byte>();
+                    resource.AddRange("8BIM"u8.ToArray());
+                    resource.AddRange([0x04, 0x0C, 0, 0]);                       // id 1036, empty name
+                    var size = 28 + jpeg.Length;
+                    resource.AddRange([(byte)(size >> 24), (byte)(size >> 16), (byte)(size >> 8), (byte)size]);
+                    resource.AddRange(new byte[28]);
+                    resource.AddRange(jpeg);
+                    if ((size & 1) != 0) resource.Add(0);
+                    text.Append($"%BeginPhotoshop: {resource.Count * 2}\n");
+                    HexLines(resource);
+                    text.Append("%EndPhotoshop\n");
+                    break;
+                }
             case EpsKind.Illustrator or EpsKind.IllustratorRle:
                 {
                     var data = new List<byte>();
@@ -320,10 +337,20 @@ internal static class RasterFiles
         }
         text.Append($"newpath 0 0 moveto {width} {height} lineto stroke\nshowpage\n%%EOF\n");
         var postScript = Encoding.ASCII.GetBytes(text.ToString());
-        if (preview != EpsKind.DosTiff) return postScript;
+        if (preview is not (EpsKind.DosTiff or EpsKind.Photoshop)) return postScript;
 
+        // the Photoshop file also has the 1-bit TIFF preview Photoshop writes, which its thumbnail must win over
         byte[] tiff;
-        using (var image = NetVips.Image.NewFromMemory(rgb, width, height, 3, NetVips.Enums.BandFormat.Uchar)) tiff = image.WriteToBuffer(".tif");
+        using (var image = NetVips.Image.NewFromMemory(rgb, width, height, 3, NetVips.Enums.BandFormat.Uchar))
+        {
+            if (preview == EpsKind.Photoshop)
+            {
+                using var grey = image[0];
+                using var bilevel = grey > 127;
+                tiff = bilevel.TiffsaveBuffer(bitdepth: 1);
+            }
+            else tiff = image.WriteToBuffer(".tif");
+        }
         var header = new byte[30];
         header[0] = 0xC5; header[1] = 0xD0; header[2] = 0xD3; header[3] = 0xC6;
         BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(4), 30);
@@ -338,11 +365,12 @@ internal static class RasterFiles
     /// A camera RAW file reduced to its structure: the test picture as a 320 x 200 JPEG preview where that camera maker puts it,
     /// usually next to a 160 x 100 thumbnail, and a lossless-JPEG "sensor" strip that must never be taken for a preview. The
     /// orientation tag is written when <paramref name="orientation"/> is not 0. <paramref name="preview"/> replaces the JPEG.
+    /// The JPEGs carry no EXIF, as camera previews usually do not.
     /// </summary>
     public static byte[] Raw(RawKind kind, int orientation = 0, byte[]? preview = null)
     {
-        preview ??= ImageFiles.Jpeg();
-        var thumbnail = ImageFiles.Jpeg(160, 100);
+        preview ??= ImageFiles.BareJpeg();
+        var thumbnail = ImageFiles.BareJpeg(160, 100);
         byte[] sensor = [0xFF, 0xD8, 0xFF, 0xC4, 0x00, 0x02, 0xFF, 0xC3, 0x00, 0x0B, 0x08, 0x00, 0xC8, 0x01, 0x40, 0x01, 0x01, 0x11, 0x00,
             0xFF, 0xDA, 0x00, 0x08, 0x01, 0x01, 0x00, 0x01, 0x00, 0x00, 0x12, 0x34, 0xFF, 0xD9];
         switch (kind)

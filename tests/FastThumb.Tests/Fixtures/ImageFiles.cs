@@ -28,6 +28,9 @@ internal static class ImageFiles
 
     public static byte[] Jpeg(int width = 320, int height = 200) { using var image = Picture(width, height); return image.WriteToBuffer(".jpg"); }
 
+    /// <summary>A JPEG with no metadata at all (no EXIF, so no orientation field), as cameras store their previews.</summary>
+    public static byte[] BareJpeg(int width = 320, int height = 200) { using var image = Picture(width, height); return image.JpegsaveBuffer(keep: Enums.ForeignKeep.None); }
+
     public static byte[] WebP(int width = 320, int height = 200) { using var image = Picture(width, height); return image.WriteToBuffer(".webp"); }
 
     /// <summary>

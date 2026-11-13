@@ -109,6 +109,17 @@ public class Jpeg2000Tests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void Reserved_markers_without_a_segment_are_skipped()
+    {
+        var data = Jpeg2000Files.Read("layers-rlcp.j2k");
+        var sot = data.AsSpan().IndexOf([(byte)0xFF, (byte)0x90]);
+        var marked = data[..sot].Concat(new byte[] { 0xFF, 0x30 }).Concat(data[sot..]).ToArray();   // as in OpenJPEG's conformance file p0_02
+        using var expected = ManagedImages.Decode(data, null, DecodeRequest.Full(long.MaxValue))!;
+        using var actual = ManagedImages.Decode(marked, null, DecodeRequest.Full(long.MaxValue))!;
+        Assert.Equal(expected.WriteToMemory<byte>(), actual.WriteToMemory<byte>());
+    }
+
+    [Fact]
     public void A_cut_file_keeps_what_it_has()
     {
         var data = Jpeg2000Files.Read("lossless-lrcp.jp2");

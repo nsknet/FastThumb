@@ -61,7 +61,8 @@ internal static class RawPreview
         request.Check(best.Width, best.Height);
         var preview = ManagedImages.Embedded(data.AsSpan(best.Start, best.Length).ToArray(), request);
         if (orientation is not (>= 1 and <= 8)) return preview;
-        using (preview) return preview.Mutate(m => m.Set("orientation", orientation));
+        // previews often carry no EXIF, so the field is created (typed), not just set
+        using (preview) return preview.Mutate(m => m.Set(NetVips.GValue.GIntType, "orientation", orientation));
     }
 
     private static (Candidate Best, int Orientation) Find(byte[] data)

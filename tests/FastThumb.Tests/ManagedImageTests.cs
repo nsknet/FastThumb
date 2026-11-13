@@ -66,6 +66,16 @@ public class ManagedImageTests
         Assert.Equal(0, Difference(RasterFiles.Tga(kind: kind, rle: rle), ".tga", Red));
 
     [Fact]
+    public void Tga_16_bit_attribute_bit_set_is_transparent()
+    {
+        // two pixels, 5-5-5 with the attribute bit clear then set, descriptor giving 1 alpha bit (as Pillow reads them)
+        byte[] tga = [0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 1, 0, 16, 0x21, 0x1F, 0x54, 0xEA, 0x83];
+        var (pixels, bands, _, _) = Pixels(tga, ".tga");
+        Assert.Equal(4, bands);
+        Assert.Equal([173, 0, 255, 255, 0, 255, 82, 0], pixels);   // Pillow gives 172 for the 5-bit 21: it rounds down
+    }
+
+    [Fact]
     public void Tga_is_told_by_its_extension_or_its_footer()
     {
         var plain = RasterFiles.Tga(footer: false);
@@ -186,6 +196,15 @@ public class ManagedImageTests
             (r, _, _) => r < 128 ? ((byte)0, (byte)0, (byte)0) : ((byte)255, (byte)255, (byte)255)));
     }
 
+    [Fact]
+    public void Photoshop_eps_shows_its_colour_thumbnail_rather_than_its_1_bit_preview()
+    {
+        using var expected = NetVips.Image.NewFromBuffer(ImageFiles.BareJpeg(160, 100));
+        var (pixels, _, width, height) = Pixels(RasterFiles.Eps(EpsKind.Photoshop), "photo.eps");
+        Assert.Equal((160, 100), (width, height));
+        Assert.Equal(expected.WriteToMemory<byte>(), pixels);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -236,7 +255,7 @@ public class ManagedImageTests
     {
         var raw = RasterFiles.Raw(kind);
         Assert.Equal(DocumentFormat.Image, ThumbnailGenerator.DetectFormat(raw, "photo" + Extension(kind)));
-        using var expected = NetVips.Image.NewFromBuffer(ImageFiles.Jpeg());
+        using var expected = NetVips.Image.NewFromBuffer(ImageFiles.BareJpeg());
         Assert.Equal(expected.WriteToMemory<byte>(), Pixels(raw, Extension(kind)).Pixels);
     }
 
@@ -266,16 +285,18 @@ public class ManagedImageTests
     public void Cr3_is_not_taken_for_a_video() => Assert.False(FormatDetector.IsVideo(RasterFiles.Raw(RawKind.Cr3), ".cr3"));
 
     [Theory]
-    [InlineData(RawKind.Cr2)]
-    [InlineData(RawKind.NefBigEndian)]
-    [InlineData(RawKind.Cr3)]
-    public void Raw_orientation_turns_the_preview(RawKind kind)
+    [InlineData(RawKind.Cr2, 6)]
+    [InlineData(RawKind.NefBigEndian, 6)]
+    [InlineData(RawKind.Cr3, 6)]
+    [InlineData(RawKind.Cr2, 1)]
+    public void Raw_orientation_turns_the_preview(RawKind kind, int orientation)
     {
-        var raw = RasterFiles.Raw(kind, orientation: 6);
+        var raw = RasterFiles.Raw(kind, orientation: orientation);
+        var (width, height) = orientation == 6 ? (200, 320) : (320, 200);
         var full = Generator.Generate(raw, "photo" + Extension(kind)).FullSize!;
-        Assert.Equal((200, 320), (full.Width, full.Height));
+        Assert.Equal((width, height), (full.Width, full.Height));
         var info = Generator.Inspect(raw, "photo" + Extension(kind));
-        Assert.Equal((200, 320), (info.Width, info.Height));
+        Assert.Equal((width, height), (info.Width, info.Height));
     }
 
     [Fact]

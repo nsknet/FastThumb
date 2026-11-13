@@ -6,9 +6,10 @@ namespace FastThumb.Images;
 
 /// <summary>
 /// Encapsulated PostScript, by the preview it carries: drawing the PostScript itself takes a PostScript interpreter, which this
-/// library does not have. In order of preference: the TIFF of a DOS EPS (binary header C5 D0 D3 C6), an EPSI preview of 8 bits
-/// or more, the colour thumbnail Illustrator writes (%AI7_Thumbnail), an EPSI preview of fewer bits. With none, the file is
-/// refused; its size is still known from %%BoundingBox.
+/// library does not have. In order of preference: the TIFF of a DOS EPS (binary header C5 D0 D3 C6) unless it is 1-bit, an
+/// EPSI preview of 8 bits or more, the thumbnail of a Photoshop EPS (its image resources, in hex), the colour thumbnail
+/// Illustrator writes (%AI7_Thumbnail), then 1-bit previews (TIFF, EPSI). With none, the file is refused; its size is still
+/// known from %%BoundingBox.
 /// </summary>
 internal static class EpsPreview
 {
@@ -58,11 +59,23 @@ internal static class EpsPreview
 
     private static NetVips.Image Decode(ReadOnlySpan<byte> ps, byte[]? tiff, DecodeRequest request)
     {
+        // a 1-bit preview is a dithered stand-in: a grey or colour one comes first, however small
+        var oneBit = tiff != null && TiffWalker.Open(tiff) is { Directories.Count: > 0 } walker && (walker.Get(walker.Directories[0], 0x0102) ?? 1) == 1;
+        if (tiff != null && !oneBit) return ManagedImages.Embedded(tiff, request);
+        var preview = Epsi(ps, request, minDepth: 8) ?? Photoshop(ps, request) ?? Illustrator(ps, request);
+        if (preview != null) return preview;
         if (tiff != null) return ManagedImages.Embedded(tiff, request);
-        var epsi = Epsi(ps, request, minDepth: 8);
-        if (epsi != null) return epsi;
-        return Illustrator(ps, request) ?? Epsi(ps, request, minDepth: 1)
+        return Epsi(ps, request, minDepth: 1)
             ?? throw new UnsupportedFormatException("The EPS file has no preview to show (drawing PostScript itself needs a PostScript interpreter).");
+    }
+
+    /// <summary>The JPEG thumbnail among the image resources a Photoshop EPS writes in hex between %BeginPhotoshop and %EndPhotoshop.</summary>
+    private static NetVips.Image? Photoshop(ReadOnlySpan<byte> ps, DecodeRequest request)
+    {
+        var at = ps.IndexOf("%BeginPhotoshop:"u8);
+        if (at < 0) return null;
+        var resources = Hex(Body(ps, at, "%EndPhotoshop"u8), null);
+        return PsdDecoder.Thumbnail(resources, 0, resources.Length, request);
     }
 
     /// <summary>%%BoundingBox (in points; "(atend)" sends it to the trailer), rounded out to whole points.</summary>

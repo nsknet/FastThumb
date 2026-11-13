@@ -70,7 +70,7 @@ internal static class PsdDecoder
             _ => false,                                       // multichannel
         };
         if (composite) return Composite(data, psd);
-        return Thumbnail(data, psd) ?? throw new UnsupportedFormatException(
+        return Thumbnail(data, psd.Resources, psd.Resources + psd.ResourcesLength, request) ?? throw new UnsupportedFormatException(
             $"Photoshop colour mode {psd.Mode} at {psd.Depth} bits has no composite this library reads, and the file has no thumbnail.");
     }
 
@@ -240,12 +240,14 @@ internal static class PsdDecoder
         rgb[2] = Gamma(bl);
     }
 
-    /// <summary>The JPEG thumbnail of image resource 1036 (RGB) or, from Photoshop 4, 1033 (BGR), or null.</summary>
-    private static NetVips.Image? Thumbnail(byte[] data, Layout psd)
+    /// <summary>
+    /// The JPEG thumbnail of image resource 1036 (RGB) or, from Photoshop 4, 1033 (BGR), among the image resources from
+    /// <paramref name="start"/> to <paramref name="end"/>, or null. Photoshop EPS files carry the same resources.
+    /// </summary>
+    internal static NetVips.Image? Thumbnail(byte[] data, int start, int end, DecodeRequest request)
     {
         var d = data.AsSpan();
-        var end = psd.Resources + psd.ResourcesLength;
-        var at = psd.Resources;
+        var at = start;
         while (at + 12 <= end)
         {
             Guard.Check();
@@ -258,7 +260,7 @@ internal static class PsdDecoder
             if (id is 1036 or 1033 && size > 28)
             {
                 var jpeg = d.Slice(at + 28, size - 28).ToArray();
-                var image = NetVips.Image.NewFromBuffer(jpeg);
+                var image = ManagedImages.Embedded(jpeg, request);
                 if (id == 1036) return image;
                 using (image)
                 {

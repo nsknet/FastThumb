@@ -131,7 +131,14 @@ internal static class Jpeg2000Decoder
                 }
             }
         }
-        return Compose(stream, planes, bounds, width, height, colourSpace);
+        return Compose(stream, planes, bounds, width, height, reduce, colourSpace);
+    }
+
+    private static int[] Samples(int origin, int count, int step, int first, int samples)
+    {
+        var map = new int[count];
+        for (var i = 0; i < count; i++) map[i] = (int)Math.Clamp(((long)origin + i) / step - first, 0, samples - 1);
+        return map;
     }
 
     /// <summary>The inverse component transform of the first three components: RCT (reversible) or ICT (G.2, G.3).</summary>
@@ -155,7 +162,7 @@ internal static class Jpeg2000Decoder
     /// 8-bit pixels: level shift, rounding and scaling of each component, components sampled more coarsely spread over the
     /// picture, sYCC turned into RGB. One component is grey, two grey and alpha, three RGB, four or more RGBA.
     /// </summary>
-    private static NetVips.Image Compose(Codestream stream, float[][] planes, (int X0, int Y0, int Width, int Height)[] bounds, int width, int height, int colourSpace)
+    private static NetVips.Image Compose(Codestream stream, float[][] planes, (int X0, int Y0, int Width, int Height)[] bounds, int width, int height, int reduce, int colourSpace)
     {
         var count = Math.Min(planes.Length, 4);
         var bands = count switch { 1 => 1, 2 => 2, 3 => 3, _ => 4 };
@@ -166,15 +173,17 @@ internal static class Jpeg2000Decoder
             var component = stream.Components[c];
             var max = (1L << component.Precision) - 1;
             var shift = 1L << (component.Precision - 1);
-            var (_, _, cw, ch) = bounds[c];
+            var (cx0, cy0, cw, ch) = bounds[c];
             if (cw <= 0 || ch <= 0) continue;
             var plane = planes[c];
+            // the sample of a subsampled component that covers each point of the reference grid
+            var columns = Samples(Geometry.CeilShift(stream.X0, reduce), width, component.Dx, cx0, cw);
             for (var y = 0; y < height; y++)
             {
-                var sy = ch == height ? y : Math.Min(ch - 1, (int)((long)y * ch / height));
+                var sy = (int)Math.Clamp((Geometry.CeilShift(stream.Y0, reduce) + (long)y) / component.Dy - cy0, 0, ch - 1);
                 for (var x = 0; x < width; x++)
                 {
-                    var sx = cw == width ? x : Math.Min(cw - 1, (int)((long)x * cw / width));
+                    var sx = columns[x];
                     var v = Math.Clamp((long)MathF.Round(plane[sy * cw + sx]) + shift, 0, max);
                     pixels[((long)y * width + x) * bands + c] = (byte)(component.Precision > 8 ? v >> (component.Precision - 8) : component.Precision == 8 ? v : v * 255 / max);
                 }

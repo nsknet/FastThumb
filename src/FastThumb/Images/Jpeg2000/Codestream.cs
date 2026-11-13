@@ -88,6 +88,7 @@ internal sealed class Codestream
             Guard.Check();
             if (at + 2 > end) throw new InvalidDocumentException("The JPEG 2000 main header has no tile.");
             if (BinaryPrimitives.ReadUInt16BigEndian(data.AsSpan(at)) == 0xFF90) break;
+            if (Reserved(data, at)) { at += 2; continue; }
             var (marker, segment) = stream.Segment(ref at, end);
             stream.Read(main, marker, stream.Content(segment));
         }
@@ -108,6 +109,7 @@ internal sealed class Codestream
             var own = new Pieces(stream.Components.Length);
             while (at + 2 <= partEnd && BinaryPrimitives.ReadUInt16BigEndian(data.AsSpan(at)) != 0xFF93)
             {
+                if (Reserved(data, at)) { at += 2; continue; }
                 var (marker, header) = stream.Segment(ref at, partEnd);
                 stream.Read(own, marker, stream.Content(header));
             }
@@ -124,6 +126,9 @@ internal sealed class Codestream
         }
         return stream;
     }
+
+    /// <summary>0xFF30 to 0xFF3F: reserved markers with no segment, which a decoder skips (A.1.4).</summary>
+    private static bool Reserved(byte[] data, int at) => data[at] == 0xFF && (data[at + 1] & 0xF0) == 0x30;
 
     /// <summary>One marker segment: the marker and where its content is (after the length).</summary>
     private (int Marker, (int Start, int Length) Content) Segment(ref int at, int end)

@@ -130,7 +130,8 @@ internal static class TgaDecoder
                 rgba[0] = (byte)((r << 3) | (r >> 2));
                 rgba[1] = (byte)((g << 3) | (g >> 2));
                 rgba[2] = (byte)((b << 3) | (b >> 2));
-                rgba[3] = bits == 16 && (v & 0x8000) == 0 ? (byte)0 : (byte)255;
+                // the attribute bit set means transparent, as the files in use have it (and as Pillow reads them)
+                rgba[3] = bits == 16 && (v & 0x8000) != 0 ? (byte)0 : (byte)255;
                 break;
         }
     }
