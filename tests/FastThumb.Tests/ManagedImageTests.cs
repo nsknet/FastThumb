@@ -172,4 +172,57 @@ public class ManagedImageTests
         var psd = RasterFiles.Psd(compression: 0);
         Assert.Throws<InvalidDocumentException>(() => Generator.Generate(psd[..(psd.Length / 2)], "cut.psd"));
     }
+
+    // ---- EPS -------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Eps_shows_the_tiff_of_a_dos_eps() => Assert.Equal(0, Difference(RasterFiles.Eps(RasterFiles.EpsPreview.DosTiff), null, Same));
+
+    [Fact]
+    public void Eps_shows_an_epsi_preview_with_0_as_white()
+    {
+        Assert.Equal(0, Difference(RasterFiles.Eps(RasterFiles.EpsPreview.Epsi8), null, Red));
+        Assert.Equal(0, Difference(RasterFiles.Eps(RasterFiles.EpsPreview.Epsi1), null,
+            (r, _, _) => r < 128 ? ((byte)0, (byte)0, (byte)0) : ((byte)255, (byte)255, (byte)255)));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Eps_shows_the_illustrator_thumbnail(bool rle) =>
+        Assert.Equal(0, Difference(RasterFiles.Eps(rle ? RasterFiles.EpsPreview.IllustratorRle : RasterFiles.EpsPreview.Illustrator), null, Red));
+
+    [Fact]
+    public void Eps_without_a_preview_is_refused_but_inspected_from_its_bounding_box()
+    {
+        var eps = RasterFiles.Eps(RasterFiles.EpsPreview.None, 300, 150);
+        Assert.Equal(DocumentFormat.Image, ThumbnailGenerator.DetectFormat(eps, null));
+        Assert.Throws<UnsupportedFormatException>(() => Generator.Generate(eps, "drawing.eps"));
+        var info = Generator.Inspect(eps);
+        Assert.Equal((300, 150), (info.Width, info.Height));
+    }
+
+    [Fact]
+    public void Plain_postscript_is_not_taken_for_eps()
+    {
+        var ps = RasterFiles.Ascii("%!PS-Adobe-3.0\n%%Pages: 1\nshowpage\n");
+        Assert.Equal(DocumentFormat.Text, ThumbnailGenerator.DetectFormat(ps, "document.ps"));
+        Assert.Equal(DocumentFormat.Image, ThumbnailGenerator.DetectFormat(ps, "drawing.eps"));
+    }
+
+    [Fact]
+    public void Eps_previews_declaring_a_huge_size_are_refused()
+    {
+        var epsi = RasterFiles.Ascii("%!PS-Adobe-3.0 EPSF-3.0\n%%BeginPreview: 60000 60000 8 1\n%00\n%%EndPreview\n");
+        Assert.Throws<ResourceLimitExceededException>(() => Generator.Generate(epsi, "huge.eps"));
+        var ai = RasterFiles.Ascii("%!PS-Adobe-3.0 EPSF-3.0\n%AI7_Thumbnail: 60000 60000 8\n%%BeginData: 2 Hex Bytes\n%00\n%%EndData\n");
+        Assert.Throws<ResourceLimitExceededException>(() => Generator.Generate(ai, "huge.eps"));
+    }
+
+    [Fact]
+    public void Dos_eps_sections_past_the_end_are_damaged()
+    {
+        var eps = RasterFiles.Eps(RasterFiles.EpsPreview.DosTiff);
+        Assert.Throws<InvalidDocumentException>(() => Generator.Generate(eps[..(eps.Length - 100)], "cut.eps"));
+    }
 }

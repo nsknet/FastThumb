@@ -250,5 +250,85 @@ internal static class RasterFiles
         return data;
     }
 
+    public enum EpsPreview { None, DosTiff, Epsi8, Epsi1, Illustrator, IllustratorRle }
+
+    /// <summary>
+    /// An EPS of a 320 x 200 pt box with a preview of the test picture: a TIFF in a DOS EPS, an EPSI preview (8-bit grey of the
+    /// red band, or 1-bit black where red &lt; 128) or an Illustrator thumbnail (a palette of greys indexed by the red band).
+    /// </summary>
+    public static byte[] Eps(EpsPreview preview = EpsPreview.DosTiff, int width = 320, int height = 200)
+    {
+        var rgb = ImageFiles.Rgb(width, height);
+        var text = new StringBuilder($"%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 {width} {height}\n%%Title: test\n%%EndComments\n");
+        void HexLines(IEnumerable<byte> bytes)
+        {
+            var line = new StringBuilder();
+            foreach (var b in bytes)
+            {
+                line.Append(b.ToString("X2", System.Globalization.CultureInfo.InvariantCulture));
+                if (line.Length >= 60) { text.Append('%').Append(line).Append('\n'); line.Clear(); }
+            }
+            if (line.Length > 0) text.Append('%').Append(line).Append('\n');
+        }
+        switch (preview)
+        {
+            case EpsPreview.Epsi8 or EpsPreview.Epsi1:
+                {
+                    var depth = preview == EpsPreview.Epsi8 ? 8 : 1;
+                    var rowBytes = (width * depth + 7) / 8;
+                    var rows = new byte[rowBytes * height];
+                    for (var y = 0; y < height; y++)
+                        for (var x = 0; x < width; x++)
+                        {
+                            var r = rgb[(y * width + x) * 3];
+                            if (depth == 8) rows[y * rowBytes + x] = (byte)(255 - r);
+                            else if (r < 128) rows[y * rowBytes + x / 8] |= (byte)(0x80 >> (x & 7));
+                        }
+                    text.Append($"%%BeginPreview: {width} {height} {depth} {height}\n");
+                    HexLines(rows);
+                    text.Append("%%EndPreview\n");
+                    break;
+                }
+            case EpsPreview.Illustrator or EpsPreview.IllustratorRle:
+                {
+                    var data = new List<byte>();
+                    for (var i = 0; i < 256; i++) data.AddRange([(byte)i, (byte)i, (byte)i]);
+                    var indices = Enumerable.Range(0, width * height).Select(i => rgb[i * 3]).ToArray();
+                    if (preview == EpsPreview.Illustrator) data.AddRange(indices);
+                    else
+                    {
+                        data.AddRange("RLE"u8.ToArray());
+                        for (var i = 0; i < indices.Length;)
+                        {
+                            var run = 1;
+                            while (i + run < indices.Length && run < 255 && indices[i + run] == indices[i]) run++;
+                            if (run >= 3) { data.AddRange([0xFD, (byte)run, indices[i]]); i += run; continue; }
+                            if (indices[i] == 0xFD) data.AddRange([0xFD, 0xFD]);
+                            else data.Add(indices[i]);
+                            i++;
+                        }
+                    }
+                    text.Append($"%AI7_Thumbnail: {width} {height} 8\n%%BeginData: {data.Count * 2} Hex Bytes\n");
+                    HexLines(data);
+                    text.Append("%%EndData\n");
+                    break;
+                }
+        }
+        text.Append($"newpath 0 0 moveto {width} {height} lineto stroke\nshowpage\n%%EOF\n");
+        var postScript = Encoding.ASCII.GetBytes(text.ToString());
+        if (preview != EpsPreview.DosTiff) return postScript;
+
+        byte[] tiff;
+        using (var image = NetVips.Image.NewFromMemory(rgb, width, height, 3, NetVips.Enums.BandFormat.Uchar)) tiff = image.WriteToBuffer(".tif");
+        var header = new byte[30];
+        header[0] = 0xC5; header[1] = 0xD0; header[2] = 0xD3; header[3] = 0xC6;
+        BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(4), 30);
+        BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(8), (uint)postScript.Length);
+        BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(20), (uint)(30 + postScript.Length));
+        BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(24), (uint)tiff.Length);
+        header[28] = 0xFF; header[29] = 0xFF;          // no checksum
+        return [.. header, .. postScript, .. tiff];
+    }
+
     internal static byte[] Ascii(string text) => Encoding.ASCII.GetBytes(text);
 }

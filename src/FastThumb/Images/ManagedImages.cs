@@ -29,7 +29,7 @@ internal readonly record struct DecodeRequest(long MaxPixels, Func<int, int, boo
 /// </summary>
 internal static class ManagedImages
 {
-    private enum Kind { None, Tga, Psd }
+    private enum Kind { None, Tga, Psd, Eps }
 
     /// <summary>
     /// A format read here, from its signature (TGA has none: its extension, or the TGA 2.0 footer). <paramref name="d"/> may be
@@ -42,6 +42,7 @@ internal static class ManagedImages
     {
         Kind.Tga => Run(() => TgaDecoder.Decode(data, request)),
         Kind.Psd => Run(() => PsdDecoder.Decode(data, request)),
+        Kind.Eps => Run(() => EpsPreview.Decode(data, request)),
         _ => null,
     };
 
@@ -50,12 +51,14 @@ internal static class ManagedImages
     {
         Kind.Tga => Run(() => TgaDecoder.Size(data)),
         Kind.Psd => Run(() => PsdDecoder.Size(data)),
+        Kind.Eps => Run(() => EpsPreview.Size(data)),
         _ => null,
     };
 
     private static Kind Find(ReadOnlySpan<byte> d, string? extension)
     {
         if (PsdDecoder.Claims(d)) return Kind.Psd;
+        if (EpsPreview.Claims(d, extension)) return Kind.Eps;
         if (TgaDecoder.Claims(d, extension)) return Kind.Tga;
         return Kind.None;
     }
@@ -69,6 +72,15 @@ internal static class ManagedImages
         {
             throw new InvalidDocumentException($"The image is damaged ({e.GetType().Name}: {e.Message})", e);
         }
+    }
+
+    /// <summary>A preview a file carries in a format libvips reads (JPEG, TIFF), size-checked on its header.</summary>
+    public static NetVips.Image Embedded(byte[] encoded, DecodeRequest request)
+    {
+        var image = NetVips.Image.NewFromBuffer(encoded);
+        try { request.Check(image.Width, image.Height); }
+        catch { image.Dispose(); throw; }
+        return image;
     }
 
     /// <summary>Interleaved 8-bit pixels (1 grey, 2 grey + alpha, 3 RGB, 4 RGBA bands) as a libvips image.</summary>
