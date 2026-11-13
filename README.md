@@ -91,6 +91,9 @@ step, is in [docs/architecture.md](docs/architecture.md).
 - **Text for search**: the plain text of every page from the same read, for full-text search or a language model.
 - **Placeholders**: a ThumbHash of about 25 bytes and the average colour, to show while the thumbnail loads.
 - **Page limit**: `MaxPages = 1` skips laying out the rest of a long document when only the thumbnail is needed.
+- **Inspect**: format, page count, size, title, author, dates and video duration without rendering anything.
+- **Observable**: traces and metrics through `System.Diagnostics` (`ActivitySource` and `Meter` named `FastThumb`),
+  ready for OpenTelemetry, with no extra dependency.
 - **Bytes, streams or files**: a seekable video stream is read in place (only the container header and one group of
   pictures), so thumbnails of remote videos are cheap.
 - **Thread-safe**: one `ThumbnailGenerator` instance can serve any number of concurrent calls.
@@ -239,6 +242,58 @@ public sealed class PreviewService(IThumbnailGenerator thumbnails)
 ```csharp
 DocumentFormat format = ThumbnailGenerator.DetectFormat(data, "file.bin");        // Unknown if not recognised
 IReadOnlyCollection<string> extensions = ThumbnailGenerator.SupportedExtensions;  // ".docx", ".pdf", ".mp4", ...
+```
+
+### Inspect
+
+`Inspect` reads what a file says about itself, without laying it out or rendering it:
+
+```csharp
+DocumentInfo info = generator.InspectFile("report.pdf");
+// info.Format, PageCount, Width, Height, Title, Author, Subject, Keywords, Created, Modified, Duration, VideoCodec
+```
+
+| Input | What `Inspect` reads |
+|---|---|
+| PDF | Page count, size of page 1 (72 DPI), and the document information dictionary. |
+| DOCX, XLSX, XLSB, PPTX | `docProps/core.xml`; the saved page count of a DOCX and slide count of a PPTX. |
+| ODT, ODS, ODP, FODP | `meta.xml`; the saved page count of an ODT. |
+| EPUB | Title, author, subject and dates of the package document. |
+| Image | Width and height from the header, after EXIF rotation. |
+| Video | Width and height as displayed, duration and codec, from the first frame. |
+
+Other formats give the format alone. A damaged properties part leaves the properties `null` instead of failing.
+
+### Telemetry
+
+Every `Generate` and `Inspect` call is traced and measured with `System.Diagnostics`, under the name
+`ThumbnailGenerator.TelemetryName` (`"FastThumb"`). Nothing is recorded while nobody listens. With OpenTelemetry:
+
+```csharp
+builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing => tracing.AddSource(ThumbnailGenerator.TelemetryName))
+    .WithMetrics(metrics => metrics.AddMeter(ThumbnailGenerator.TelemetryName));
+```
+
+| Instrument | Unit | Tags |
+|---|---|---|
+| `fastthumb.operation.duration` (histogram) | s | `fastthumb.operation` (`generate`, `inspect`), `fastthumb.format`, `error.type` on failure |
+| `fastthumb.input.size` (histogram) | By | `fastthumb.operation` |
+| `fastthumb.output.size` (counter) | By | `fastthumb.format`, `fastthumb.output` (`image`, `pdf`) |
+| `fastthumb.pages` (counter) | {page} | `fastthumb.operation`, `fastthumb.format` |
+
+The activities are `FastThumb.Generate` and `FastThumb.Inspect`, with the format, page count, image count, output
+size and stage durations as tags. A failure sets the status to error with the exception type, never its message.
+Without OpenTelemetry, `dotnet-counters monitor --counters FastThumb -n <process>` shows the metrics live.
+
+### ASP.NET Core sample
+
+[samples/FastThumb.AspNetCore](samples/FastThumb.AspNetCore/Program.cs) is a small minimal API: upload a file, get a
+WebP thumbnail, a square tile, a placeholder and the text back. It shows the generator registered once, a limit on
+concurrent renders, content-hash ids with immutable caching, and the library's exceptions mapped to 415, 413 and 422.
+
+```bash
+dotnet run --project samples/FastThumb.AspNetCore
 ```
 
 ## Results and errors

@@ -191,7 +191,14 @@ internal static class Thumbnailer
     /// Same as the byte[] overload, from a stream. A seekable video is read in place (only its header and the frame that is
     /// taken); every other format is read whole first. The stream is read from its current position and is not disposed.
     /// </summary>
-    public static ThumbnailResult Create(Stream stream, string? extension, ThumbnailOptions options)
+    public static ThumbnailResult Create(Stream stream, string? extension, ThumbnailOptions options) =>
+        Read(stream, extension, options, video => CreateVideo(video, options), data => Create(data, extension, options));
+
+    /// <summary>
+    /// A seekable video goes to <paramref name="video"/> as a stream starting at the current position (read in place);
+    /// any other input is read into memory, within <see cref="ResourceLimits.MaxInputBytes"/>, and goes to <paramref name="other"/>.
+    /// </summary>
+    public static T Read<T>(Stream stream, string? extension, ThumbnailOptions options, Func<Stream, T> video, Func<byte[], T> other)
     {
         if (stream.CanSeek)
         {
@@ -200,15 +207,15 @@ internal static class Thumbnailer
             var read = stream.ReadAtLeast(head, head.Length, throwOnEndOfStream: false);
             stream.Position = start;
             if (FormatDetector.IsVideo(head[..read], extension))
-                return start == 0 ? CreateVideo(stream, options) : CreateVideo(new SubStream(stream, start), options);
+                return start == 0 ? video(stream) : video(new SubStream(stream, start));
             // known length: one exact buffer instead of a growing MemoryStream and a copy of it
             var length = stream.Length - start;
             if (length > options.Limits.MaxInputBytes) throw TooLarge(options);
             var data = GC.AllocateUninitializedArray<byte>((int)length);
             stream.ReadExactly(data);
-            return Create(data, extension, options);
+            return other(data);
         }
-        return Create(ReadAll(stream, options), extension, options);
+        return other(ReadAll(stream, options));
     }
 
     /// <summary>The rest of a non-seekable stream, within <see cref="ResourceLimits.MaxInputBytes"/>.</summary>
@@ -466,7 +473,7 @@ internal static class Thumbnailer
     }
 
     /// <summary>A read-only view of a seekable stream from a given offset on, so a video can start mid-stream.</summary>
-    private sealed class SubStream(Stream inner, long start) : Stream
+    internal sealed class SubStream(Stream inner, long start) : Stream
     {
         public override bool CanRead => true;
         public override bool CanSeek => true;

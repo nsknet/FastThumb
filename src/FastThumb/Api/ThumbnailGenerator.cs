@@ -26,6 +26,21 @@ public interface IThumbnailGenerator
     /// (network, cloud storage). The stream is read asynchronously; decoding and rendering then run on the thread pool.
     /// </summary>
     Task<ThumbnailResult> GenerateAsync(Stream stream, string? fileName = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Format, page count, size and document properties of an input held in memory, without laying it out or rendering it.
+    /// A video is opened and its first frame decoded, to learn its displayed size.
+    /// </summary>
+    /// <param name="data">The whole file.</param>
+    /// <param name="fileName">The file name or extension, if known. Only used to tell plain-text formats apart.</param>
+    /// <param name="cancellationToken">Stops the work between reads.</param>
+    DocumentInfo Inspect(ReadOnlyMemory<byte> data, string? fileName = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Same as <see cref="Inspect(ReadOnlyMemory{byte}, string?, CancellationToken)"/>, from a stream (a seekable video is read in place).</summary>
+    DocumentInfo Inspect(Stream stream, string? fileName = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Same as <see cref="Inspect(ReadOnlyMemory{byte}, string?, CancellationToken)"/>, for a file on disk.</summary>
+    DocumentInfo InspectFile(string path, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -47,6 +62,13 @@ public interface IThumbnailGenerator
 /// </remarks>
 public sealed class ThumbnailGenerator : IThumbnailGenerator
 {
+    /// <summary>
+    /// Name of the <see cref="System.Diagnostics.ActivitySource"/> and the <see cref="System.Diagnostics.Metrics.Meter"/> this
+    /// library reports to: "FastThumb". With OpenTelemetry, <c>.AddSource(ThumbnailGenerator.TelemetryName)</c> and
+    /// <c>.AddMeter(ThumbnailGenerator.TelemetryName)</c>.
+    /// </summary>
+    public const string TelemetryName = "FastThumb";
+
     /// <summary>A generator with <see cref="ThumbnailOptions.Default"/>.</summary>
     public static ThumbnailGenerator Default { get; } = new();
 
@@ -80,14 +102,14 @@ public sealed class ThumbnailGenerator : IThumbnailGenerator
     {
         if (data.Length > Options.Limits.MaxInputBytes) throw Thumbnailer.TooLarge(Options);
         var array = AsArray(data);
-        return Run(() => Thumbnailer.Create(array, Extension(fileName), Options), cancellationToken);
+        return Run("generate", array.Length, () => Thumbnailer.Create(array, Extension(fileName), Options), cancellationToken);
     }
 
     /// <inheritdoc />
     public ThumbnailResult Generate(Stream stream, string? fileName = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(stream);
-        return Run(() => Thumbnailer.Create(stream, Extension(fileName), Options), cancellationToken);
+        return Run("generate", null, () => Thumbnailer.Create(stream, Extension(fileName), Options), cancellationToken);
     }
 
     /// <inheritdoc />
@@ -115,6 +137,29 @@ public sealed class ThumbnailGenerator : IThumbnailGenerator
         return await Task.Run(() => Generate(data, fileName, cancellationToken), cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
+    public DocumentInfo Inspect(ReadOnlyMemory<byte> data, string? fileName = null, CancellationToken cancellationToken = default)
+    {
+        if (data.Length > Options.Limits.MaxInputBytes) throw Thumbnailer.TooLarge(Options);
+        var array = AsArray(data);
+        return Run("inspect", array.Length, () => Inspector.Inspect(array, Extension(fileName), Options), cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public DocumentInfo Inspect(Stream stream, string? fileName = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        return Run("inspect", null, () => Inspector.Inspect(stream, Extension(fileName), Options), cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public DocumentInfo InspectFile(string path, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(path);
+        using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 1, FileOptions.SequentialScan);
+        return Inspect(file, Path.GetFileName(path), cancellationToken);
+    }
+
     /// <summary>The readers index arrays: the caller's array is used as it is when the memory is a whole one.</summary>
     private static byte[] AsArray(ReadOnlyMemory<byte> data) =>
         System.Runtime.InteropServices.MemoryMarshal.TryGetArray(data, out var segment)
@@ -123,15 +168,29 @@ public sealed class ThumbnailGenerator : IThumbnailGenerator
     private static string? Extension(string? fileName) =>
         string.IsNullOrEmpty(fileName) ? null : fileName.StartsWith('.') ? fileName : Path.GetExtension(fileName);
 
-    /// <summary>Runs one call with its cancellation in scope and the public exception types at the boundary.</summary>
-    private static ThumbnailResult Run(Func<ThumbnailResult> work, CancellationToken cancellationToken)
+    /// <summary>
+    /// Runs one call with its cancellation in scope, the public exception types at the boundary, and a trace and metrics.
+    /// </summary>
+    private static T Run<T>(string operation, long? inputBytes, Func<T> work, CancellationToken cancellationToken) where T : class
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        using var activity = Telemetry.Start(operation, inputBytes);
         var previous = Guard.Cancellation;
         Guard.Cancellation = cancellationToken;
-        try { return work(); }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch (Exception e) when (Translate(e) is { } translated) { throw translated; }
+        try
+        {
+            var result = work();
+            Telemetry.Succeeded(activity, operation, started, result);
+            return result;
+        }
+        catch (Exception e)
+        {
+            var thrown = e is OperationCanceledException && cancellationToken.IsCancellationRequested ? e : Translate(e) ?? e;
+            Telemetry.Failed(activity, operation, started, thrown);
+            if (ReferenceEquals(thrown, e)) throw;
+            throw thrown;
+        }
         finally { Guard.Cancellation = previous; }
     }
 

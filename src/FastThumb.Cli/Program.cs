@@ -24,6 +24,8 @@ try
         ["info", ..] => Cli.Info(),
         ["fonts", .. var families] when families.Length > 0 => Cli.Fonts(families),
         ["fonts"] => throw new UsageException("fonts: give at least one font family"),
+        ["inspect", .. var files] when files.Length > 0 => Cli.Inspect(files),
+        ["inspect"] => throw new UsageException("inspect: give at least one file"),
         ["run", .. var rest] when rest.Any(a => a is "-h" or "--help") => Cli.Help(),
         ["run", .. var rest] => Cli.Run(RunSettings.Parse(rest)),
         _ => throw new UsageException($"unknown command '{args[0]}'"),
@@ -222,6 +224,7 @@ static class Cli
 
             Usage:
               fastthumb run <input>... -o <dir> [options]   make thumbnails and/or preview PDFs
+              fastthumb inspect <file>...                   format, pages, size and properties, one JSON line per file
               fastthumb info                                platform, native libraries, how Office fonts resolve
               fastthumb fonts <family>...                   width and line spacing of installed font families
               fastthumb --version | --help
@@ -273,6 +276,44 @@ static class Cli
               fastthumb run photos/ -o out -m images -s 300 --fit cover --placeholder --json
             """);
         return 0;
+    }
+
+    /// <summary>One JSON line per file: what ThumbnailGenerator.Inspect reads, without rendering anything.</summary>
+    public static int Inspect(IEnumerable<string> files)
+    {
+        var failed = false;
+        foreach (var file in files)
+        {
+            if (!File.Exists(file)) throw new UsageException($"input not found: {file}");
+            object line;
+            try
+            {
+                var info = ThumbnailGenerator.Default.InspectFile(file);
+                line = new
+                {
+                    file,
+                    format = info.Format.ToString(),
+                    pages = info.PageCount,
+                    width = info.Width,
+                    height = info.Height,
+                    title = info.Title,
+                    author = info.Author,
+                    subject = info.Subject,
+                    keywords = info.Keywords,
+                    created = info.Created,
+                    modified = info.Modified,
+                    durationSeconds = info.Duration?.TotalSeconds,
+                    videoCodec = info.VideoCodec,
+                };
+            }
+            catch (Exception e) when (e is ThumbnailException or IOException or TimeoutException or UnauthorizedAccessException)
+            {
+                failed = true;
+                line = new { file, error = $"{e.GetType().Name}: {e.Message}" };
+            }
+            Console.WriteLine(JsonSerializer.Serialize(line, JsonOptions));
+        }
+        return failed ? 1 : 0;
     }
 
     public static int Fonts(IEnumerable<string> families)

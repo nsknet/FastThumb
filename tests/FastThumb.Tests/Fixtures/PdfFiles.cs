@@ -7,7 +7,8 @@ namespace FastThumb.Tests.Fixtures;
 internal static class PdfFiles
 {
     /// <summary>A PDF of <paramref name="pages"/> pages of the given size in points, each with a filled box and a line of text.</summary>
-    public static byte[] Pdf(int pages = 1, double width = 612, double height = 792)
+    /// <param name="info">Body of the document information dictionary (for example "/Title (Report)"), or null for none.</param>
+    public static byte[] Pdf(int pages = 1, double width = 612, double height = 792, string? info = null)
     {
         // objects: 1 catalog, 2 pages, 3 font, then per page: page object and its content stream
         var objects = new List<string>
@@ -28,10 +29,12 @@ internal static class PdfFiles
             kids.Add($"{pageId} 0 R");
         }
         objects[1] = $"<< /Type /Pages /Kids [{string.Join(' ', kids)}] /Count {pages} >>";
-        return Write(objects);
+        if (info == null) return Write(objects);
+        objects.Add($"<< {info} >>");
+        return Write(objects, objects.Count);
     }
 
-    private static byte[] Write(List<string> objects)
+    private static byte[] Write(List<string> objects, int? infoId = null)
     {
         var output = new StringBuilder("%PDF-1.4\n%âãÏÓ\n");
         var offsets = new List<int>();
@@ -43,7 +46,7 @@ internal static class PdfFiles
         var xref = Encoding.Latin1.GetByteCount(output.ToString());
         output.Append($"xref\n0 {objects.Count + 1}\n0000000000 65535 f \n");
         foreach (var offset in offsets) output.Append($"{offset:D10} 00000 n \n");
-        output.Append($"trailer\n<< /Size {objects.Count + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n");
+        output.Append($"trailer\n<< /Size {objects.Count + 1} /Root 1 0 R{(infoId is { } id ? $" /Info {id} 0 R" : "")} >>\nstartxref\n{xref}\n%%EOF\n");
         return Encoding.Latin1.GetBytes(output.ToString());
     }
 }

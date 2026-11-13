@@ -113,6 +113,48 @@ internal static class Pdfium
         return joined.Length == 0 ? "" : joined + "\n";
     }
 
+    [DllImport(Dll)] private static extern unsafe CULong FPDF_GetMetaText(IntPtr document, [MarshalAs(UnmanagedType.LPStr)] string tag, void* buffer, CULong length);
+
+    private static readonly string[] MetaTags = ["Title", "Author", "Subject", "Keywords", "CreationDate", "ModDate"];
+
+    /// <summary>Page count, size of page 1 in points and the document information entries, without rendering anything.</summary>
+    public static unsafe (int PageCount, float Width, float Height, Dictionary<string, string> Meta) Inspect(byte[] pdf)
+    {
+        var pin = GCHandle.Alloc(pdf, GCHandleType.Pinned);
+        try
+        {
+            lock (Gate)
+            {
+                var document = Open(pin, pdf.Length);
+                try
+                {
+                    var count = FPDF_GetPageCount(document);
+                    float width = 0, height = 0;
+                    var page = FPDF_LoadPage(document, 0);
+                    if (page != IntPtr.Zero)
+                    {
+                        try { (width, height) = (FPDF_GetPageWidthF(page), FPDF_GetPageHeightF(page)); }
+                        finally { FPDF_ClosePage(page); }
+                    }
+                    if (!(width > 0 && height > 0)) throw new InvalidDataException("PDF page 1 has no size");
+                    var meta = new Dictionary<string, string>();
+                    foreach (var tag in MetaTags)
+                    {
+                        // UTF-16LE with a terminating zero; the length comes from the file, so it is capped
+                        var length = (long)FPDF_GetMetaText(document, tag, null, new CULong(0)).Value;
+                        if (length <= 2 || length > 1 << 16) continue;
+                        var buffer = new byte[length];
+                        fixed (byte* bytes = buffer) FPDF_GetMetaText(document, tag, bytes, new CULong((nuint)length));
+                        meta[tag] = System.Text.Encoding.Unicode.GetString(buffer, 0, (int)length - 2);
+                    }
+                    return (count, width, height, meta);
+                }
+                finally { FPDF_CloseDocument(document); }
+            }
+        }
+        finally { pin.Free(); }
+    }
+
     /// <summary>Width and height of page 1 in points.</summary>
     public static (double Width, double Height) FirstPageSize(byte[] pdf)
     {

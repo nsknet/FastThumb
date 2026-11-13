@@ -19,12 +19,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **Page limit**: `ThumbnailOptions.MaxPages` stops the layout, the preview PDF and the text after that many pages;
   `ThumbnailResult.HasMorePages` tells whether pages were left out. `MaxPages = 1` makes thumbnails of long documents
   cheaper.
-- Command-line tool: `--text`, `--placeholder`, `--max-pages`, `--fit`, `--aspect` and `--mode none`.
+- **Inspect**: `ThumbnailGenerator.Inspect` and `InspectFile` return a `DocumentInfo` (format, page count, size, title,
+  author, subject, keywords, dates, video duration and codec) without laying out or rendering.
+- **Telemetry**: an `ActivitySource` and a `Meter` named `FastThumb` (`ThumbnailGenerator.TelemetryName`) trace every
+  call and measure duration, input and output size and pages. No dependency; nothing is recorded without a listener.
+- **ASP.NET Core sample** in `samples/FastThumb.AspNetCore`.
+- Command-line tool: `--text`, `--placeholder`, `--max-pages`, `--fit`, `--aspect`, `--mode none` and the `inspect`
+  command.
 
 ### Changed
 
 - `ThumbnailOutputs.All` still means images and preview PDF; the new flags are added to it with `|`. Code that used
   the value 4 as an invalid flag now gets `Text`.
+- `IThumbnailGenerator` has three new members (`Inspect` twice and `InspectFile`). A class of your own that implements
+  the interface must add them; mocking libraries are not affected.
 
 ## [1.1.0] - 2026-11-13
 

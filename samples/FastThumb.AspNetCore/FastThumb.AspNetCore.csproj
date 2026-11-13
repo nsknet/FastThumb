@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Sample: an upload endpoint that returns a thumbnail, a placeholder and the text of a document.
+    It references the library project; an application of your own references the FastThumb package instead.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\FastThumb\FastThumb.csproj" />
+  </ItemGroup>
+
+</Project>

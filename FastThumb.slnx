@@ -3,6 +3,9 @@
     <Project Path="src/FastThumb/FastThumb.csproj" />
     <Project Path="src/FastThumb.Cli/FastThumb.Cli.csproj" />
   </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/FastThumb.AspNetCore/FastThumb.AspNetCore.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/FastThumb.Tests/FastThumb.Tests.csproj" />
   </Folder>

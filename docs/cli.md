@@ -29,6 +29,7 @@ Video needs the thumbvideo library for your platform (see [native.md](native.md)
 | Command | What it does |
 |---|---|
 | `fastthumb run <input>... -o <dir> [options]` | Makes thumbnails and/or preview PDFs. |
+| `fastthumb inspect <file>...` | Prints one JSON line per file with the format, page count, size and document properties, without rendering anything. |
 | `fastthumb info` | Prints the tool and library versions, the operating system, runtime identifier, .NET version and CPU count, the versions of libvips, Skia and thumbvideo, whether PDFium renders a page, and how common office fonts resolve on this machine. |
 | `fastthumb fonts <family>...` | Prints, for each installed family, the width of a test sentence and the ascent, descent and leading per em; `not installed` for a family that is missing. |
 | `fastthumb --version` (`-V`, `version`) | Prints the tool version, library version, .NET version and runtime identifier. |
@@ -187,6 +188,20 @@ Square 300 px tiles of page 1 only, with placeholders in the JSON lines:
 ```bash
 fastthumb run in/ -o out -m images -s 300 --fit cover --max-pages 1 --placeholder --json > tiles.jsonl
 ```
+
+## `inspect`
+
+```bash
+fastthumb inspect report.pdf clip.mp4
+```
+
+```json
+{"file":"report.pdf","format":"Pdf","pages":13,"width":417,"height":583,"title":"Annual report"}
+{"file":"clip.mp4","format":"Video","pages":1,"width":1920,"height":1080,"durationSeconds":12.5,"videoCodec":"h264"}
+```
+
+Fields are those of `DocumentInfo` (see the main README); a field with no value is omitted. A file that cannot be
+read gives `{"file":...,"error":"<type>: <message>"}` and the exit status 1.
 
 ## `info`
 

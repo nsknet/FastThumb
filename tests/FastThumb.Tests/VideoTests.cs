@@ -48,6 +48,24 @@ public class VideoTests
 
     [VideoTheory]
     [MemberData(nameof(Videos))]
+    public void Video_is_inspected_for_size_duration_and_codec(string file)
+    {
+        var info = Generator.InspectFile(VideoFixtures.PathOf(file));
+        Assert.Equal(DocumentFormat.Video, info.Format);
+        Assert.Equal((Width, Height), (info.Width, info.Height));
+        Assert.Equal(1, info.PageCount);
+        Assert.NotNull(info.Duration);
+        Assert.InRange(info.Duration.Value.TotalSeconds, 0.5, 1.5);
+        Assert.False(string.IsNullOrEmpty(info.VideoCodec));
+
+        // a stream that starts in the middle of a larger buffer is read from its own position
+        var bytes = File.ReadAllBytes(VideoFixtures.PathOf(file));
+        using var padded = new MemoryStream([.. new byte[100], .. bytes]) { Position = 100 };
+        Assert.Equal((Width, Height), (Generator.Inspect(padded).Width, Generator.Inspect(new MemoryStream(bytes)).Height));
+    }
+
+    [VideoTheory]
+    [MemberData(nameof(Videos))]
     public void Video_frame_gives_cover_boxes_a_placeholder_and_no_text(string file)
     {
         var generator = new ThumbnailGenerator(Options with
