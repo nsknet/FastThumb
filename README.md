@@ -391,12 +391,22 @@ Images are identical on .NET 8 and .NET 10. Preview PDFs have identical content,
 ### .NET Framework
 
 The `net462` build runs on .NET Framework 4.6.2 to 4.8.1, on Windows only, as a 32-bit (x86) or 64-bit (x64, arm64)
-process. Set the project's platform target to `x64`, `x86` or `ARM64`: .NET Framework has no `runtimes/<rid>` lookup, so
-the platform target decides which native libraries are copied next to the application, and an `AnyCPU` build can copy
+process. Set the project's platform target to `x64` or `x86`: .NET Framework has no `runtimes/<rid>` lookup, so the
+platform target decides which native libraries are copied next to the application, and an `AnyCPU` build can copy
 32-bit libraries into a 64-bit process.
 
 ```xml
 <PlatformTarget>x64</PlatformTarget>
+```
+
+An arm64 process needs .NET Framework 4.8.1: target `net481` and name the runtime identifier as well, since the SDK
+infers one only for x86 and x64, and libvips ships its arm64 build for .NET Framework only to `net481` projects. On Windows
+on Arm an x64 build also works, under emulation.
+
+```xml
+<TargetFramework>net481</TargetFramework>
+<PlatformTarget>ARM64</PlatformTarget>
+<RuntimeIdentifier>win-arm64</RuntimeIdentifier>
 ```
 
 Thumbnails are the same as on .NET apart from sub-pixel differences in text, and the work is noticeably slower than on
@@ -413,7 +423,7 @@ thumbnail generation in an isolated, resource-limited worker process or containe
 ## Building from source
 
 Requirements: the .NET 10 SDK (see [global.json](global.json)), plus the .NET 6 and .NET 8 runtimes to run the `net6.0`
-and `net8.0` tests. On Windows the tests also run on .NET Framework (`net472`).
+and `net8.0` tests. On Windows the tests also run on .NET Framework (`net472`; `net481` as an arm64 process on Windows on Arm).
 
 ```bash
 dotnet build FastThumb.slnx -c Release

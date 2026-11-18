@@ -73,7 +73,8 @@ jobs:
 
       - run: dotnet build FastThumb.slnx -c Release
 
-      # every target framework of the tests: net6.0, net8.0, net10.0, and net472 (the net462 library) on Windows
+      # every target framework of the tests: net6.0, net8.0, net10.0, and on Windows net472 (the net462 library), or
+      # net481 as an arm64 process on Windows on Arm
       - run: dotnet test FastThumb.slnx -c Release --no-build --logger trx --results-directory artifacts/test-results
 
       - name: CLI smoke test

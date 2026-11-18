@@ -42,7 +42,8 @@ On Linux, install fontconfig and the fonts listed in [docs/linux.md](docs/linux.
 dotnet test FastThumb.slnx -c Release
 ```
 
-- Tests run on `net6.0`, `net8.0`, `net10.0` and, on Windows, `net472` (which loads the `net462` library).
+- Tests run on `net6.0`, `net8.0`, `net10.0` and, on Windows, `net472` (which loads the `net462` library; on Windows
+  on Arm `net481`, as an arm64 process).
 - Test inputs are **generated in code** (`tests/FastThumb.Tests/Fixtures`): office documents are assembled from
   their XML parts, PDFs and images are drawn, hostile files are constructed byte by byte. Add new inputs the same
   way.

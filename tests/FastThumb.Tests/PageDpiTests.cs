@@ -70,6 +70,8 @@ public class PageDpiTests
         var slow = PdfFiles.SlowPdf(10_000);
         var generator = new ThumbnailGenerator(Images with { Sizes = [2500], IncludeFullSize = false });
 
+        // the first page also pays for loading and compiling, by far the most on .NET Framework: time a second one
+        generator.Generate(slow, "slow.pdf");
         var clock = Stopwatch.StartNew();
         generator.Generate(slow, "slow.pdf");
         var whole = clock.Elapsed;

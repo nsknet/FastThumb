@@ -157,7 +157,7 @@ dotnet test FastThumb.slnx -c Release
 - [ci.yml](../.github/workflows/ci.yml): a formatting check (`dotnet format --verify-no-changes`); the native build;
   build and tests on `ubuntu-24.04`, `ubuntu-24.04-arm`, `windows-2025`, `windows-11-arm`, `macos-15` and
   `macos-15-intel` (x64 and arm64 on each platform), for every target framework of the tests (`net6.0`, `net8.0`,
-  `net10.0`, and `net472` on Windows); a package job that packs both packages, checks the package
+  `net10.0`, and `net472` on Windows, `net481` arm64 on Windows on Arm); a package job that packs both packages, checks the package
   layout with [eng/check-package.sh](../eng/check-package.sh) and installs them into a fresh application and tool
   with [eng/smoke/run.sh](../eng/smoke/run.sh); and a Docker job that builds the image and runs `fastthumb info` in
   it.

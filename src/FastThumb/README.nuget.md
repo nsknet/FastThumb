@@ -76,8 +76,9 @@ Windows, Linux (glibc) and macOS, x64 and arm64, plus 32-bit Windows; the native
 package. Linux needs fontconfig and fonts: see [docs/linux.md](https://github.com/nsknet/FastThumb/blob/main/docs/linux.md).
 
 Target frameworks: `net10.0`, `net8.0`, `net6.0` (.NET 6 and 7) and `net462` (.NET Framework 4.6.2 to 4.8.1, Windows).
-On .NET Framework set `<PlatformTarget>` to `x64`, `x86` or `ARM64`, so the native libraries copied next to the
-application match the process.
+On .NET Framework set `<PlatformTarget>` to `x64` or `x86`, so the native libraries copied next to the application
+match the process. For arm64, target `net481` with `<PlatformTarget>ARM64</PlatformTarget>` and
+`<RuntimeIdentifier>win-arm64</RuntimeIdentifier>`.
 
 ## Security
 

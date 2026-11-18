@@ -13,7 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   4.6.2 to 4.8.1, Windows), next to `net8.0` and `net10.0`. The public API is the same on every target.
 - **.NET Framework support**: native libraries are loaded by full path, since .NET Framework has no `runtimes/<rid>`
   lookup; `buildTransitive/net462/FastThumb.targets` copies thumbvideo next to the application in `x86\`, `x64\` and
-  `arm64\`. Applications should set `<PlatformTarget>` to `x64`, `x86` or `ARM64`.
+  `arm64\`. Applications should set `<PlatformTarget>` to `x64` or `x86`; arm64 needs a `net481` project with
+  `<PlatformTarget>ARM64</PlatformTarget>` and `<RuntimeIdentifier>win-arm64</RuntimeIdentifier>`.
 - **thumbvideo for `win-x86`**, for 32-bit .NET Framework processes.
 
 ### Changed
