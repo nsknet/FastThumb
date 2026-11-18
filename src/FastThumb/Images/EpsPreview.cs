@@ -227,6 +227,6 @@ internal static class EpsPreview
             high = -1;
             if (o == output.Length) break;
         }
-        return size != null || o == output.Length ? output : output[..o];
+        return size != null || o == output.Length ? output : output.AsSpan(0, o).ToArray();
     }
 }

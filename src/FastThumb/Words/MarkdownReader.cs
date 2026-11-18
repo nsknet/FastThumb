@@ -402,17 +402,55 @@ internal static partial class MarkdownReader
 
     private static string Label(string label) => Regex.Replace(label.Trim(), @"\s+", " ").ToUpperInvariant();
 
-    [GeneratedRegex(@"^ {0,3}\[((?:[^\]\\]|\\.){1,999})\]:\s*\S")] private static partial Regex RefDef();
-    [GeneratedRegex(@"^(#{1,6})(?:[ ]+(.*))?$")] private static partial Regex Atx();
-    [GeneratedRegex(@"(?:^|[ ]+)#+[ ]*$")] private static partial Regex ClosingHashes();
-    [GeneratedRegex(@"^(=+|-+)[ ]*$")] private static partial Regex Setext();
-    [GeneratedRegex(@"^(?:(?:\*[ ]*){3,}|(?:-[ ]*){3,}|(?:_[ ]*){3,})$")] private static partial Regex ThematicBreak();
-    [GeneratedRegex(@"^(`{3,}(?=[^`]*$)|~{3,})")] private static partial Regex Fence();
-    [GeneratedRegex(@"^([-+*]|\d{1,9}[.)])(?:( +)|$)")] private static partial Regex ListMarker();
-    [GeneratedRegex(@"^\[([ xX])\](?:[ ]+|$)")] private static partial Regex TaskBox();
-    [GeneratedRegex(@"^\|?[ ]*:?-+:?[ ]*(?:\|[ ]*:?-+:?[ ]*)*\|?[ ]*$")] private static partial Regex DelimiterRow();
-    [GeneratedRegex(@"^<(!--|/?[a-zA-Z][a-zA-Z0-9-]*)(?=[\s/>]|$)")] private static partial Regex HtmlBlock();
-    [GeneratedRegex(@"align\s*=\s*[""']?center", RegexOptions.IgnoreCase)] private static partial Regex AlignCenter();
+    private const string RefDefPattern = @"^ {0,3}\[((?:[^\]\\]|\\.){1,999})\]:\s*\S";
+    private const string AtxPattern = @"^(#{1,6})(?:[ ]+(.*))?$";
+    private const string ClosingHashesPattern = @"(?:^|[ ]+)#+[ ]*$";
+    private const string SetextPattern = @"^(=+|-+)[ ]*$";
+    private const string ThematicBreakPattern = @"^(?:(?:\*[ ]*){3,}|(?:-[ ]*){3,}|(?:_[ ]*){3,})$";
+    private const string FencePattern = @"^(`{3,}(?=[^`]*$)|~{3,})";
+    private const string ListMarkerPattern = @"^([-+*]|\d{1,9}[.)])(?:( +)|$)";
+    private const string TaskBoxPattern = @"^\[([ xX])\](?:[ ]+|$)";
+    private const string DelimiterRowPattern = @"^\|?[ ]*:?-+:?[ ]*(?:\|[ ]*:?-+:?[ ]*)*\|?[ ]*$";
+    private const string HtmlBlockPattern = @"^<(!--|/?[a-zA-Z][a-zA-Z0-9-]*)(?=[\s/>]|$)";
+    private const string AlignCenterPattern = @"align\s*=\s*[""']?center";
+#if NET7_0_OR_GREATER
+    [GeneratedRegex(RefDefPattern)] private static partial Regex RefDef();
+    [GeneratedRegex(AtxPattern)] private static partial Regex Atx();
+    [GeneratedRegex(ClosingHashesPattern)] private static partial Regex ClosingHashes();
+    [GeneratedRegex(SetextPattern)] private static partial Regex Setext();
+    [GeneratedRegex(ThematicBreakPattern)] private static partial Regex ThematicBreak();
+    [GeneratedRegex(FencePattern)] private static partial Regex Fence();
+    [GeneratedRegex(ListMarkerPattern)] private static partial Regex ListMarker();
+    [GeneratedRegex(TaskBoxPattern)] private static partial Regex TaskBox();
+    [GeneratedRegex(DelimiterRowPattern)] private static partial Regex DelimiterRow();
+    [GeneratedRegex(HtmlBlockPattern)] private static partial Regex HtmlBlock();
+    [GeneratedRegex(AlignCenterPattern, RegexOptions.IgnoreCase)] private static partial Regex AlignCenter();
+#else
+    // the regex source generator needs .NET 7: older targets compile each pattern once, on first use
+    private static Regex Compiled(string pattern, RegexOptions options = RegexOptions.None) => new(pattern, options | RegexOptions.Compiled);
+    private static Regex? s_refDef;
+    private static Regex RefDef() => s_refDef ??= Compiled(RefDefPattern);
+    private static Regex? s_atx;
+    private static Regex Atx() => s_atx ??= Compiled(AtxPattern);
+    private static Regex? s_closingHashes;
+    private static Regex ClosingHashes() => s_closingHashes ??= Compiled(ClosingHashesPattern);
+    private static Regex? s_setext;
+    private static Regex Setext() => s_setext ??= Compiled(SetextPattern);
+    private static Regex? s_thematicBreak;
+    private static Regex ThematicBreak() => s_thematicBreak ??= Compiled(ThematicBreakPattern);
+    private static Regex? s_fence;
+    private static Regex Fence() => s_fence ??= Compiled(FencePattern);
+    private static Regex? s_listMarker;
+    private static Regex ListMarker() => s_listMarker ??= Compiled(ListMarkerPattern);
+    private static Regex? s_taskBox;
+    private static Regex TaskBox() => s_taskBox ??= Compiled(TaskBoxPattern);
+    private static Regex? s_delimiterRow;
+    private static Regex DelimiterRow() => s_delimiterRow ??= Compiled(DelimiterRowPattern);
+    private static Regex? s_htmlBlock;
+    private static Regex HtmlBlock() => s_htmlBlock ??= Compiled(HtmlBlockPattern);
+    private static Regex? s_alignCenter;
+    private static Regex AlignCenter() => s_alignCenter ??= Compiled(AlignCenterPattern, RegexOptions.IgnoreCase);
+#endif
 
     // ---- inlines --------------------------------------------------------------------------------
 
@@ -700,10 +738,23 @@ internal static partial class MarkdownReader
         private static bool IsPunctuation(char c) => char.IsPunctuation(c) || char.IsSymbol(c);
     }
 
-    [GeneratedRegex(@"\G<([a-zA-Z][a-zA-Z0-9+.\-]{1,31}:[^\s<>]*|[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~\-]+@[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*)>")]
-    private static partial Regex Autolink();
-    [GeneratedRegex(@"\G(?:<!--[\s\S]{0,4096}?-->|</?([a-zA-Z][a-zA-Z0-9-]*)(?:\s[^<>]*)?/?>)")]   // bounded: linear on unclosed tags
-    private static partial Regex InlineTag();
-    [GeneratedRegex(@"\G&(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[a-zA-Z][a-zA-Z0-9]{1,31});")] private static partial Regex Entity();
-    [GeneratedRegex(@"\G(?:https?://|www\.)[^\s<]+")] private static partial Regex BareLink();
+    private const string AutolinkPattern = @"\G<([a-zA-Z][a-zA-Z0-9+.\-]{1,31}:[^\s<>]*|[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~\-]+@[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*)>";
+    private const string InlineTagPattern = @"\G(?:<!--[\s\S]{0,4096}?-->|</?([a-zA-Z][a-zA-Z0-9-]*)(?:\s[^<>]*)?/?>)";   // bounded: linear on unclosed tags
+    private const string EntityPattern = @"\G&(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[a-zA-Z][a-zA-Z0-9]{1,31});";
+    private const string BareLinkPattern = @"\G(?:https?://|www\.)[^\s<]+";
+#if NET7_0_OR_GREATER
+    [GeneratedRegex(AutolinkPattern)] private static partial Regex Autolink();
+    [GeneratedRegex(InlineTagPattern)] private static partial Regex InlineTag();
+    [GeneratedRegex(EntityPattern)] private static partial Regex Entity();
+    [GeneratedRegex(BareLinkPattern)] private static partial Regex BareLink();
+#else
+    private static Regex? s_autolink;
+    private static Regex Autolink() => s_autolink ??= Compiled(AutolinkPattern);
+    private static Regex? s_inlineTag;
+    private static Regex InlineTag() => s_inlineTag ??= Compiled(InlineTagPattern);
+    private static Regex? s_entity;
+    private static Regex Entity() => s_entity ??= Compiled(EntityPattern);
+    private static Regex? s_bareLink;
+    private static Regex BareLink() => s_bareLink ??= Compiled(BareLinkPattern);
+#endif
 }

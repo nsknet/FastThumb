@@ -192,7 +192,7 @@ internal sealed class DocReader : IPageSource
                 if (p + length > std.Length) break;
                 var data = std.Slice(p, length).ToArray();
                 p += length;
-                if (kind == 1 && u == 0) style.Papx = data.Length >= 2 ? data[2..] : [];
+                if (kind == 1 && u == 0) style.Papx = data.Length >= 2 ? data.AsSpan(2).ToArray() : [];
                 else if ((kind == 1 && u == 1) || (kind == 2 && u == 0)) style.Chpx = data;
             }
             styles[i] = style;

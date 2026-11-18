@@ -22,15 +22,17 @@ documentation fixes are all welcome.
 
 ## Building
 
-Requirements: the .NET 10 SDK (the exact band is in [global.json](global.json)) and, to run the `net8.0` tests, the
-.NET 8 runtime.
+Requirements: the .NET 10 SDK (the exact band is in [global.json](global.json)) and, to run the `net6.0` and `net8.0`
+tests, the .NET 6 and .NET 8 runtimes.
 
 ```bash
 dotnet build FastThumb.slnx -c Release
 ```
 
-Warnings are errors. The library targets `net8.0` and `net10.0`; the command-line tool targets `net8.0` and rolls
-forward.
+Warnings are errors. The library targets `net462`, `net6.0`, `net8.0` and `net10.0`; the command-line tool targets
+`net8.0` and rolls forward. APIs newer than a target come from the source-only Polyfill package or from
+`src/FastThumb/Polyfills/`; keep `#if` to those files and the two native interop files (`Video/VideoFrame.cs`,
+`Scene/Pdfium.cs`).
 
 On Linux, install fontconfig and the fonts listed in [docs/linux.md](docs/linux.md) before running tests.
 
@@ -40,7 +42,7 @@ On Linux, install fontconfig and the fonts listed in [docs/linux.md](docs/linux.
 dotnet test FastThumb.slnx -c Release
 ```
 
-- Tests run on both target frameworks.
+- Tests run on `net6.0`, `net8.0`, `net10.0` and, on Windows, `net472` (which loads the `net462` library).
 - Test inputs are **generated in code** (`tests/FastThumb.Tests/Fixtures`): office documents are assembled from
   their XML parts, PDFs and images are drawn, hostile files are constructed byte by byte. Add new inputs the same
   way.
@@ -62,7 +64,7 @@ The thumbvideo binaries are not committed (`src/FastThumb/runtimes/` is git-igno
 runtime identifiers. Locally, build the one for your platform:
 
 ```bash
-sh native/thumbvideo/build.sh linux-x64     # or win-x64, win-arm64, linux-arm64, osx-x64, osx-arm64
+sh native/thumbvideo/build.sh linux-x64     # or win-x86, win-x64, win-arm64, linux-arm64, osx-x64, osx-arm64
 ```
 
 This needs zig, make, git, meson, ninja and, for the x64 targets, nasm. Details are in

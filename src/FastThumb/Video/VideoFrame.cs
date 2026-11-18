@@ -28,6 +28,7 @@ internal static unsafe partial class VideoFrame
         public fixed byte Container[32];
     }
 
+#if NET7_0_OR_GREATER
     [LibraryImport(Library)]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     private static partial int tv_frame(
@@ -41,7 +42,22 @@ internal static unsafe partial class VideoFrame
     [LibraryImport(Library)]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     private static partial nint tv_version();
+#else
+    // every parameter is blittable, so the classic import marshals nothing either
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int tv_frame(nint read, nint seek, nint opaque,
+        double fraction, int timeoutMs, Info* info, byte** rgb, byte* error, int errorSize);
 
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    private static extern void tv_free(byte* rgb);
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl)]
+    private static extern nint tv_version();
+#endif
+
+#if NETFRAMEWORK
+    static VideoFrame() => NativePreload.Load("thumbvideo.dll");
+#else
     static VideoFrame() => NativeLibrary.SetDllImportResolver(typeof(VideoFrame).Assembly, Resolve);
 
     /// <summary>The library ships as runtimes/{rid}/native/ next to the application, for every platform at once.</summary>
@@ -55,6 +71,7 @@ internal static unsafe partial class VideoFrame
             if (File.Exists(candidate) && NativeLibrary.TryLoad(candidate, out var handle)) return handle;
         return 0;   // fall back to the default probing
     }
+#endif
 
     /// <summary>Name and FFmpeg release of the native library.</summary>
     public static string Version => Marshal.PtrToStringUTF8(tv_version()) ?? "";
@@ -65,7 +82,24 @@ internal static unsafe partial class VideoFrame
         public Exception? Error;
     }
 
+#if NET7_0_OR_GREATER
+#elif NET5_0_OR_GREATER
+    private static nint ReadCallback => (nint)(delegate* unmanaged[Cdecl]<nint, byte*, int, int>)&Read;
+    private static nint SeekCallback => (nint)(delegate* unmanaged[Cdecl]<nint, long, int, long>)&Seek;
+#else
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int ReadFunction(nint opaque, byte* buffer, int size);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate long SeekFunction(nint opaque, long offset, int whence);
+
+    // the delegates live as long as the type, so the thunks the native side calls are never collected
+    private static readonly ReadFunction ReadDelegate = Read;
+    private static readonly SeekFunction SeekDelegate = Seek;
+    private static readonly nint ReadCallback = Marshal.GetFunctionPointerForDelegate(ReadDelegate);
+    private static readonly nint SeekCallback = Marshal.GetFunctionPointerForDelegate(SeekDelegate);
+#endif
+
+#if NET5_0_OR_GREATER
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+#endif
     private static int Read(nint opaque, byte* buffer, int size)
     {
         var source = (Source)GCHandle.FromIntPtr(opaque).Target!;
@@ -77,7 +111,9 @@ internal static unsafe partial class VideoFrame
         catch (Exception e) { source.Error ??= e; return -1; }
     }
 
+#if NET5_0_OR_GREATER
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+#endif
     private static long Seek(nint opaque, long offset, int whence)
     {
         var source = (Source)GCHandle.FromIntPtr(opaque).Target!;
@@ -118,7 +154,11 @@ internal static unsafe partial class VideoFrame
         try
         {
             int code;
+#if NET7_0_OR_GREATER
             try { code = tv_frame(&Read, &Seek, GCHandle.ToIntPtr(handle), fraction, timeoutMs, &native, &rgb, error, 256); }
+#else
+            try { code = tv_frame(ReadCallback, SeekCallback, GCHandle.ToIntPtr(handle), fraction, timeoutMs, &native, &rgb, error, 256); }
+#endif
             catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
             {
                 throw new UnsupportedFormatException("Video is not supported here: the thumbvideo native library for this platform was not found.", e);

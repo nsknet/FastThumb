@@ -7,7 +7,7 @@ using SkiaSharp;
 
 namespace FastThumb.Words;
 
-internal sealed class DocxReader : IPageSource, IDisposable
+internal sealed class DocxReader : IPageSource, IPageDecorations, IDisposable
 {
     private static readonly XNamespace W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
     private static readonly XNamespace R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -130,8 +130,15 @@ internal sealed class DocxReader : IPageSource, IDisposable
 
     // ---- headers and footers ---------------------------------------------------------------------
 
-    // linear time whatever the slice holds (a backtracking scan of [^>]* is quadratic on a crafted sectPr)
+    // linear time whatever the slice holds (a backtracking scan of [^>]* is quadratic on a crafted sectPr); before .NET 7
+    // there is no linear engine, so a time limit bounds the scan instead and a crafted sectPr fails as a damaged document
+#if NET7_0_OR_GREATER
     private const System.Text.RegularExpressions.RegexOptions NonBacktracking = System.Text.RegularExpressions.RegexOptions.NonBacktracking;
+    private static readonly TimeSpan RegexTimeout = System.Text.RegularExpressions.Regex.InfiniteMatchTimeout;
+#else
+    private const System.Text.RegularExpressions.RegexOptions NonBacktracking = System.Text.RegularExpressions.RegexOptions.None;
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(2);
+#endif
 
     private void ReadStoryReferences()
     {
@@ -140,15 +147,15 @@ internal sealed class DocxReader : IPageSource, IDisposable
         var end = _documentXml.IndexOf("</w:sectPr>", at, StringComparison.Ordinal);
         var slice = end > at ? _documentXml[at..end] : "";
         _titlePage = slice.Contains("<w:titlePg", StringComparison.Ordinal);
-        foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(slice, "<w:(header|footer)Reference ([^>]*)>", NonBacktracking))
+        foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(slice, "<w:(header|footer)Reference ([^>]*)>", NonBacktracking, RegexTimeout))
         {
-            var type = System.Text.RegularExpressions.Regex.Match(m.Groups[2].Value, "w:type=\"([^\"]+)\"", NonBacktracking).Groups[1].Value;
-            var id = System.Text.RegularExpressions.Regex.Match(m.Groups[2].Value, "r:id=\"([^\"]+)\"", NonBacktracking).Groups[1].Value;
+            var type = System.Text.RegularExpressions.Regex.Match(m.Groups[2].Value, "w:type=\"([^\"]+)\"", NonBacktracking, RegexTimeout).Groups[1].Value;
+            var id = System.Text.RegularExpressions.Regex.Match(m.Groups[2].Value, "r:id=\"([^\"]+)\"", NonBacktracking, RegexTimeout).Groups[1].Value;
             if (Relationships("document.xml").TryGetValue(id, out var target)) _storyParts[m.Groups[1].Value + "-" + type] = target;
         }
         float Distance(string name, float fallback)
         {
-            var m = System.Text.RegularExpressions.Regex.Match(slice, "<w:pgMar [^>]*w:" + name + "=\"(\\d+)\"", NonBacktracking);
+            var m = System.Text.RegularExpressions.Regex.Match(slice, "<w:pgMar [^>]*w:" + name + "=\"(\\d+)\"", NonBacktracking, RegexTimeout);
             return m.Success ? float.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture) / 20f : fallback;
         }
         HeaderDistance = Distance("header", 36);

@@ -183,7 +183,7 @@ internal static class AiPaths
                     case (byte)']':
                         if (_arrayStart >= 0 && _arrayStart <= _stack.Count)
                         {
-                            _array = [.. _stack.Skip(_arrayStart).Where(double.IsFinite).Select(v => (float)v)];
+                            _array = [.. _stack.Skip(_arrayStart).Where(v => double.IsFinite(v)).Select(v => (float)v)];
                             _stack.RemoveRange(_arrayStart, _stack.Count - _arrayStart);
                         }
                         _arrayStart = -1;
@@ -232,7 +232,7 @@ internal static class AiPaths
         }
 
         /// <summary>Every numeric operand, strings and names left out.</summary>
-        private float[] Numbers() => [.. _stack.Where(double.IsFinite).Select(v => (float)v)];
+        private float[] Numbers() => [.. _stack.Where(v => double.IsFinite(v)).Select(v => (float)v)];
 
         private void Execute(string op)
         {

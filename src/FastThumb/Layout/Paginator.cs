@@ -96,19 +96,19 @@ internal sealed class Paginator
         _cellDepth++;
         try
         {
-            if (_source.Header(first) is { Count: > 0 } header)
+            if (_source is IPageDecorations decorations && decorations.Header(first) is { Count: > 0 } header)
             {
-                var y = _source.HeaderDistance;
+                var y = decorations.HeaderDistance;
                 Layout(header, left, width, ref y);
                 _top = Math.Max(page.Top, Math.Min(y, page.Height * 0.5f));
             }
-            if (_source.Footer(first) is { Count: > 0 } footer)
+            if (_source is IPageDecorations bottom && bottom.Footer(first) is { Count: > 0 } footer)
             {
                 var mark = _scene.Count;
                 var y = 0f;
                 Layout(footer, left, width, ref y);       // measuring pass
                 _scene.Truncate(mark);
-                y = Math.Max(page.Height - _source.FooterDistance - y, page.Height * 0.5f);
+                y = Math.Max(page.Height - bottom.FooterDistance - y, page.Height * 0.5f);
                 Layout(footer, left, width, ref y);
             }
         }

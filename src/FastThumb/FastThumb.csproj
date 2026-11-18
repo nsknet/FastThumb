@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <TargetFrameworks>net462;net6.0;net8.0;net10.0</TargetFrameworks>
     <RootNamespace>FastThumb</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsAotCompatible>false</IsAotCompatible>
@@ -13,7 +13,28 @@
     <Description>Fast, in-process thumbnails and preview PDFs for office documents, spreadsheets, presentations, PDF, e-books, images and video. No Office, no LibreOffice, no external processes. Windows, Linux and macOS.</Description>
     <PackageTags>thumbnail;preview;document;pdf;docx;xlsx;pptx;image;psd;raw;jpeg2000;video;render</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- ArgumentNullException.ThrowIfNull and ArgumentException.ThrowIfNullOrEmpty for net462 and net6.0 -->
+    <PolyArgumentExceptions>true</PolyArgumentExceptions>
+    <!-- InternalsVisibleTo would otherwise show one assembly's polyfills to the next, and they would clash -->
+    <PolyUseEmbeddedAttribute>true</PolyUseEmbeddedAttribute>
+    <!-- the only package that warns is System.IO.Hashing, pulled in at build time by SourceLink and not shipped -->
+    <SuppressTfmSupportBuildWarnings Condition="'$(TargetFramework)' == 'net6.0'">true</SuppressTfmSupportBuildWarnings>
   </PropertyGroup>
+
+  <!-- .NET Framework: its BCL has no nullable annotations, so these warnings only repeat what the .NET targets check -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net462'">
+    <NoWarn>$(NoWarn);CS8600;CS8601;CS8602;CS8603;CS8604;CS8620</NoWarn>
+  </PropertyGroup>
+
+  <!-- .NET Framework: the parts of the BCL that .NET has in the box -->
+  <ItemGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework'">
+    <PackageReference Include="System.Memory" />
+    <PackageReference Include="System.Threading.Tasks.Extensions" />
+    <PackageReference Include="System.ValueTuple" />
+    <PackageReference Include="System.Diagnostics.DiagnosticSource" />
+    <PackageReference Include="System.Runtime.InteropServices.RuntimeInformation" />
+    <Reference Include="System.IO.Compression" />
+  </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="FastThumb.Cli" />
@@ -31,6 +52,9 @@
     <PackageReference Include="bblanchon.PDFium.macOS" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="all" />
     <PackageReference Include="MinVer" PrivateAssets="all" />
+    <!-- source-only back-ports of newer BCL members for net462 and net6.0; adds no runtime dependency -->
+    <PackageReference Include="Polyfill" PrivateAssets="all" />
+    <Using Include="Polyfills" />
   </ItemGroup>
 
   <!--
@@ -40,6 +64,8 @@
   -->
   <ItemGroup>
     <None Include="runtimes\**\*" Pack="true" PackagePath="runtimes" CopyToOutputDirectory="PreserveNewest" />
+    <!-- .NET Framework consumers: copies thumbvideo out of runtimes/; build/ for packages.config, buildTransitive/ for PackageReference -->
+    <None Include="buildTransitive\net462\FastThumb.targets" Pack="true" PackagePath="build\net462;buildTransitive\net462" />
     <!-- nuget.org shows neither raw HTML, relative links nor SVG, so the package carries a short Markdown-only README. -->
     <None Include="README.nuget.md" Pack="true" PackagePath="\README.md" Visible="false" />
     <None Include="..\..\THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="\" Visible="false" />

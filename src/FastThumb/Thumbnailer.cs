@@ -418,7 +418,7 @@ internal static class Thumbnailer
         catch (NetVips.VipsException e)
         {
             using var codec = SKCodec.Create(SKData.CreateCopy(data))
-                ?? throw new UnsupportedFormatException($"Image cannot be decoded: {e.Message.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault()}", e);
+                ?? throw new UnsupportedFormatException($"Image cannot be decoded: {ThumbnailGenerator.LastErrorLine(e.Message)}", e);
             CheckPixels(codec.Info.Width, codec.Info.Height, maxPixels);
             using var decoded = SKBitmap.Decode(codec, new SKImageInfo(codec.Info.Width, codec.Info.Height, SKColorType.Rgba8888, SKAlphaType.Unpremul))
                 ?? throw new UnsupportedFormatException("Image cannot be decoded.", e);
@@ -589,7 +589,9 @@ internal static class Thumbnailer
         public override long Length => inner.Length - start;
         public override long Position { get => inner.Position - start; set => inner.Position = start + value; }
         public override int Read(byte[] buffer, int offset, int count) => inner.Read(buffer, offset, count);
+#if !NETFRAMEWORK
         public override int Read(Span<byte> buffer) => inner.Read(buffer);
+#endif
         public override long Seek(long offset, SeekOrigin origin) => origin switch
         {
             SeekOrigin.Begin => inner.Seek(start + offset, SeekOrigin.Begin) - start,

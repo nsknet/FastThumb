@@ -1,0 +1,25 @@
+<Project>
+  <!--
+    .NET Framework does not read runtimes/<rid>/native, and an AnyCPU project without a runtime identifier gets no native
+    assets copied at all. This puts every Windows build of thumbvideo next to the application in a folder named after its
+    architecture; FastThumb loads the one that matches the process (src/FastThumb/Polyfills/NativePreload.cs).
+    PDFium, SkiaSharp and libvips are copied by their own packages.
+  -->
+  <ItemGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework'">
+    <None Include="$(MSBuildThisFileDirectory)..\..\runtimes\win-x86\native\thumbvideo.dll" Condition="Exists('$(MSBuildThisFileDirectory)..\..\runtimes\win-x86\native\thumbvideo.dll')">
+      <Link>x86\thumbvideo.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Visible>false</Visible>
+    </None>
+    <None Include="$(MSBuildThisFileDirectory)..\..\runtimes\win-x64\native\thumbvideo.dll" Condition="Exists('$(MSBuildThisFileDirectory)..\..\runtimes\win-x64\native\thumbvideo.dll')">
+      <Link>x64\thumbvideo.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Visible>false</Visible>
+    </None>
+    <None Include="$(MSBuildThisFileDirectory)..\..\runtimes\win-arm64\native\thumbvideo.dll" Condition="Exists('$(MSBuildThisFileDirectory)..\..\runtimes\win-arm64\native\thumbvideo.dll')">
+      <Link>arm64\thumbvideo.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Visible>false</Visible>
+    </None>
+  </ItemGroup>
+</Project>

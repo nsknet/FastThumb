@@ -5,6 +5,22 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **More target frameworks**: the package now also targets `net6.0` (.NET 6 and .NET 7) and `net462` (.NET Framework
+  4.6.2 to 4.8.1, Windows), next to `net8.0` and `net10.0`. The public API is the same on every target.
+- **.NET Framework support**: native libraries are loaded by full path, since .NET Framework has no `runtimes/<rid>`
+  lookup; `buildTransitive/net462/FastThumb.targets` copies thumbvideo next to the application in `x86\`, `x64\` and
+  `arm64\`. Applications should set `<PlatformTarget>` to `x64`, `x86` or `ARM64`.
+- **thumbvideo for `win-x86`**, for 32-bit .NET Framework processes.
+
+### Changed
+
+- On .NET Framework a ZIP package whose entry names hold characters a path cannot is reported as
+  `InvalidDocumentException`, as .NET reports it.
+
 ## [1.5.0] - 2026-11-18
 
 ### Added

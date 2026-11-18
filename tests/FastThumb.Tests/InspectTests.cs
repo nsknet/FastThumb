@@ -193,6 +193,11 @@ public class InspectTests
     [Fact]
     public void Generate_and_inspect_are_traced()
     {
+#if NETFRAMEWORK
+        // .NET Framework defaults to hierarchical ids, whose trace id is empty: W3C ids, as .NET uses, tell traces apart
+        Activity.DefaultIdFormat = ActivityIdFormat.W3C;
+        Activity.ForceDefaultIdFormat = true;
+#endif
         var activities = new List<Activity>();
         using var listener = new ActivityListener
         {

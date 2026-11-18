@@ -65,7 +65,8 @@ internal static class XpsReader
             if (hash >= 0) reference = reference[..hash];
             reference = Uri.UnescapeDataString(reference);
             if (reference.StartsWith('/')) return reference.TrimStart('/');
-            var parts = new List<string>(from.Split('/')[..^1]);
+            var segments = from.Split('/');
+            var parts = new List<string>(segments.Take(segments.Length - 1));
             foreach (var piece in reference.Split('/'))
             {
                 if (piece == "..") { if (parts.Count > 0) parts.RemoveAt(parts.Count - 1); }
@@ -397,7 +398,7 @@ internal static class XpsReader
             for (var i = 1; i <= glyphs.Count; i++)
             {
                 if (i < glyphs.Count && Math.Abs(positions[i].X - (positions[i - 1].X + natural[i - 1])) < 0.1f && Math.Abs(positions[i].Y - positions[i - 1].Y) < 0.05f) continue;
-                _scene.Text(font, glyphs.GetRange(first, i - first).ToArray(), positions[first..i], color, new string(source.GetRange(first, i - first).ToArray()));
+                _scene.Text(font, glyphs.GetRange(first, i - first).ToArray(), positions.AsSpan(first, i - first).ToArray(), color, new string(source.GetRange(first, i - first).ToArray()));
                 first = i;
             }
         }

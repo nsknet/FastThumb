@@ -103,7 +103,7 @@ public sealed class ThumbnailGenerator : IThumbnailGenerator
     public static DocumentFormat DetectFormat(ReadOnlyMemory<byte> data, string? fileName = null)
     {
         try { return FormatDetector.Detect(AsArray(data), Extension(fileName)); }
-        catch (Exception e) when (e is InvalidDataException or NotSupportedException or IOException) { return DocumentFormat.Unknown; }
+        catch (Exception e) when (e is InvalidDataException or NotSupportedException or IOException || Guard.IsDamagedZipName(e)) { return DocumentFormat.Unknown; }
     }
 
     /// <inheritdoc />
@@ -204,12 +204,16 @@ public sealed class ThumbnailGenerator : IThumbnailGenerator
         InsufficientExecutionStackException => new ResourceLimitExceededException("The document is nested too deeply.", e),
         NotSupportedException => new UnsupportedFormatException(e.Message, e),
         InvalidDataException => new InvalidDocumentException(e.Message, e),
+        ArgumentException when Guard.IsDamagedZipName(e) => new InvalidDocumentException("The package is damaged: an entry name is not valid.", e),
         // libvips decodes lazily: damage past the header only shows when the pixels are read
         NetVips.VipsException => new InvalidDocumentException($"The image is damaged ({LastLine(e.Message)})", e),
         _ => null,
     };
 
     /// <summary>libvips reports a chain of errors, one per line, the cause last.</summary>
-    private static string LastLine(string message) =>
-        message.Split((char)10, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault() ?? message;
+    private static string LastLine(string message) => LastErrorLine(message) ?? message;
+
+    /// <summary>The last line of <paramref name="message"/> that is not blank, trimmed; null when there is none.</summary>
+    internal static string? LastErrorLine(string message) =>
+        message.Split('\n').Select(line => line.Trim()).LastOrDefault(line => line.Length > 0);
 }

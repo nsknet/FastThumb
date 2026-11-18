@@ -94,7 +94,11 @@ internal static class DrawingFiles
     public static byte[] GzipOfZeros(long size)
     {
         var output = new MemoryStream();
+#if NETFRAMEWORK
+        using (var gzip = new GZipStream(output, CompressionLevel.Optimal, leaveOpen: true))
+#else
         using (var gzip = new GZipStream(output, CompressionLevel.SmallestSize, leaveOpen: true))
+#endif
         {
             var block = new byte[1 << 20];
             for (long written = 0; written < size; written += block.Length) gzip.Write(block, 0, (int)Math.Min(block.Length, size - written));

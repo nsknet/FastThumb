@@ -5,13 +5,13 @@
 #
 #   ./build.sh <rid>   ->  src/FastThumb/runtimes/<rid>/native/<library>
 #
-#   win-x64, win-arm64          thumbvideo.dll
+#   win-x86, win-x64, win-arm64 thumbvideo.dll        (win-x86: 32-bit .NET Framework applications)
 #   linux-x64, linux-arm64      libthumbvideo.so      (glibc >= 2.17)
 #   osx-x64, osx-arm64          libthumbvideo.dylib   (macOS >= 11)
 #
 # Every target is cross-compiled from any host (Linux, macOS, or Windows with Git Bash).
-# Needs: zig, make, git, meson + ninja (for dav1d), a POSIX shell, and nasm for the x64 targets.
-# The SIMD code of FFmpeg and dav1d makes decoding several times faster than the C fallback: x64 uses nasm,
+# Needs: zig, make, git, meson + ninja (for dav1d), a POSIX shell, and nasm for the x86 and x64 targets.
+# The SIMD code of FFmpeg and dav1d makes decoding several times faster than the C fallback: x86 and x64 use nasm,
 # arm64 uses the assembler built into zig. ASM=0 builds without it.
 # No pkg-config: pkgconf.sh answers FFmpeg's one question about dav1d.
 # WORK (default native/thumbvideo/.work) holds the source checkouts and the per-target build trees.
@@ -20,13 +20,14 @@ set -eu
 FFMPEG_TAG="${FFMPEG_TAG:-n9.0.2}"
 DAV1D_TAG="${DAV1D_TAG:-1.5.4}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-RID="${1:?usage: build.sh win-x64|win-arm64|linux-x64|linux-arm64|osx-x64|osx-arm64}"
+RID="${1:?usage: build.sh win-x86|win-x64|win-arm64|linux-x64|linux-arm64|osx-x64|osx-arm64}"
 WORK="${WORK:-$HERE/.work}"
 OUT="${OUT:-$HERE/../../src/FastThumb/runtimes/$RID/native}"
 
 # stack canaries and checked string/memory calls: the input is untrusted (zig ignores both for mingw)
 HARDEN_GNU="-fstack-protector-strong -D_FORTIFY_SOURCE=2"
 case "$RID" in
+  win-x86)     TARGET=x86-windows-gnu;        OS=mingw32; ARCH=x86;     LIB=thumbvideo.dll;      HARDEN="" ;;
   win-x64)     TARGET=x86_64-windows-gnu;     OS=mingw32; ARCH=x86_64;  LIB=thumbvideo.dll;      HARDEN="" ;;
   win-arm64)   TARGET=aarch64-windows-gnu;    OS=mingw32; ARCH=aarch64; LIB=thumbvideo.dll;      HARDEN="" ;;
   linux-x64)   TARGET=x86_64-linux-gnu.2.17;  OS=linux;   ARCH=x86_64;  LIB=libthumbvideo.so;    HARDEN="$HARDEN_GNU" ;;
@@ -41,7 +42,7 @@ case "$OS" in
   darwin)  MESON_OS=darwin;  EXTRA_LIBS="-Wl,-exported_symbols_list,$HERE/exports.txt -Wl,-install_name,@rpath/$LIB"; GC="-Wl,-dead_strip" ;;
 esac
 if [ "${ASM:-1}" != 1 ];     then VARIANT="$RID-noasm"; DAV1D_ASM=false; FF_ASM="--disable-asm"
-elif [ "$ARCH" = x86_64 ];   then VARIANT="$RID";       DAV1D_ASM=true;  FF_ASM="--x86asmexe=nasm"
+elif [ "$ARCH" = x86_64 ] || [ "$ARCH" = x86 ]; then VARIANT="$RID";       DAV1D_ASM=true;  FF_ASM="--x86asmexe=nasm"
 else                              VARIANT="$RID";       DAV1D_ASM=true;  FF_ASM=""; fi
 
 # Containers and video codecs commonly found in uploads. Video only: no audio,

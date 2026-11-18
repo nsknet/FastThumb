@@ -99,7 +99,7 @@ internal sealed class CompoundFile
             if (output.Length >= size) break;
         }
         var data = output.ToArray();
-        return size < data.Length ? data[..size] : data;
+        return size < data.Length ? data.AsSpan(0, size).ToArray() : data;
     }
 
     public bool Has(string name) => _entries.ContainsKey(name);

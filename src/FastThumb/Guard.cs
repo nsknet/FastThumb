@@ -173,6 +173,20 @@ internal static class Guard
         catch (ArgumentException) { return null; }
     }
 
+    /// <summary>
+    /// True for the <see cref="ArgumentException"/> that .NET Framework throws while reading the directory of a ZIP whose
+    /// entry names hold characters a path cannot ("Illegal characters in path"): a damaged package, which .NET reads fine.
+    /// </summary>
+    public static bool IsDamagedZipName(Exception e)
+    {
+#if NETFRAMEWORK
+        return e is ArgumentException && !(e is ArgumentOutOfRangeException)
+            && new System.Diagnostics.StackTrace(e).GetFrames()?.Any(f => f.GetMethod()?.DeclaringType == typeof(ZipArchive)) == true;
+#else
+        return false;
+#endif
+    }
+
     private static ResourceLimitExceededException TooLarge(string name, long max) =>
         new($"'{name}' is larger than {max >> 20} MB once decompressed");
 
@@ -188,7 +202,11 @@ internal static class Guard
 
         public override int Read(byte[] buffer, int offset, int count) => Read(buffer.AsSpan(offset, count));
 
+#if NETFRAMEWORK
+        public int Read(Span<byte> buffer)   // Stream has no span overload to override before .NET Core 2.1
+#else
         public override int Read(Span<byte> buffer)
+#endif
         {
             t_cancellation.ThrowIfCancellationRequested();
             var n = inner.Read(buffer);

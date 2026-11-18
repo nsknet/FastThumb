@@ -111,10 +111,18 @@ internal interface IPageSource
     /// <summary>Lazily yields top-level blocks; stop enumerating to stop reading.</summary>
     IEnumerable<Block> Blocks();
     SKImage? LoadImage(string id);
-    IReadOnlyList<Block> Header(bool firstPage) => [];
-    IReadOnlyList<Block> Footer(bool firstPage) => [];
-    float HeaderDistance => 36;
-    float FooterDistance => 36;
+}
+
+/// <summary>
+/// Running headers and footers, for the readers that have them. A separate interface rather than default members, which
+/// .NET Framework cannot run.
+/// </summary>
+internal interface IPageDecorations
+{
+    IReadOnlyList<Block> Header(bool firstPage);
+    IReadOnlyList<Block> Footer(bool firstPage);
+    float HeaderDistance { get; }
+    float FooterDistance { get; }
 }
 
 /// <summary>A document already turned into blocks (formats that are parsed in one go).</summary>

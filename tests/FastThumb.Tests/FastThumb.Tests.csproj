@@ -1,19 +1,47 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <TargetFrameworks>net6.0;net8.0;net10.0</TargetFrameworks>
+    <!-- .NET Framework runs on Windows only; net472 is the oldest the xunit runner supports and loads the net462 library -->
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('Windows'))">net472;$(TargetFrameworks)</TargetFrameworks>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <RootNamespace>FastThumb.Tests</RootNamespace>
     <!-- CA1416: libvips is portable even though some NetVips APIs carry platform attributes -->
     <NoWarn>$(NoWarn);CA1416</NoWarn>
+    <PolyArgumentExceptions>true</PolyArgumentExceptions>
+    <!-- InternalsVisibleTo would otherwise show one assembly's polyfills to the next, and they would clash -->
+    <PolyUseEmbeddedAttribute>true</PolyUseEmbeddedAttribute>
+    <SuppressTfmSupportBuildWarnings Condition="'$(TargetFramework)' == 'net6.0'">true</SuppressTfmSupportBuildWarnings>
+  </PropertyGroup>
+
+  <!-- .NET Framework: its BCL has no nullable annotations -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net472'">
+    <!-- CS0436: RuntimeHelpers.GetSubArray is supplied in source (NetFrameworkPolyfills.cs) -->
+    <NoWarn>$(NoWarn);CS8600;CS8601;CS8602;CS8603;CS8604;CS8620;CS0436</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
-    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
     <PackageReference Include="NetVips" />
+    <PackageReference Include="Polyfill" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- the current test platform and runner dropped .NET 6: the last releases that run it -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net6.0'">
+    <PackageReference Include="Microsoft.NET.Test.Sdk" VersionOverride="17.11.1" />
+    <PackageReference Include="xunit.runner.visualstudio" VersionOverride="2.8.2" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' != 'net6.0'">
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework'">
+    <PackageReference Include="System.Memory" />
+    <PackageReference Include="System.ValueTuple" />
+    <PackageReference Include="System.Threading.Tasks.Extensions" />
+    <Reference Include="System.IO.Compression" />
   </ItemGroup>
 
   <ItemGroup>
@@ -22,6 +50,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Using Include="Polyfills" />
   </ItemGroup>
 
 </Project>

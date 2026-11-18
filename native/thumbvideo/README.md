@@ -16,7 +16,7 @@ output goes to `src/FastThumb/runtimes/<rid>/native/`:
 
 | Runtime identifier | File | Minimum system |
 |---|---|---|
-| `win-x64`, `win-arm64` | `thumbvideo.dll` | |
+| `win-x86`, `win-x64`, `win-arm64` | `thumbvideo.dll` | |
 | `linux-x64`, `linux-arm64` | `libthumbvideo.so` | glibc 2.17 |
 | `osx-x64`, `osx-arm64` | `libthumbvideo.dylib` | macOS 11 |
 
@@ -93,7 +93,7 @@ Run from the repository root:
 sh native/thumbvideo/build.sh linux-x64
 ```
 
-The argument is one of `win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`.
+The argument is one of `win-x86`, `win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`.
 
 The script:
 
@@ -266,7 +266,7 @@ Each of these is a failure that was hit while building FFmpeg with zig; removing
 | `exports.map` / `exports.txt` (instead of `--exclude-libs`) | zig's linker has no `--exclude-libs`; without the list the library exports every FFmpeg symbol, which can clash with another libav in the same process. |
 | `-Wl,-Bsymbolic` (Linux) | Makes the library resolve its own FFmpeg symbols internally. |
 | `pkgconf.sh` | Build machines may have no pkg-config, and FFmpeg only finds dav1d through pkg-config. |
-| `nm.sh` | zig ships no `nm`. FFmpeg's configure runs `nm` once to learn the symbol prefix of the target; with no answer it assumes none, and on macOS the assembly functions then lack the underscore the C code links against ("undefined symbol: _ff_..."). |
+| `nm.sh` | zig ships no `nm`. FFmpeg's configure runs `nm` once to learn the symbol prefix of the target; with no answer it assumes none, and on macOS the assembly functions then lack the underscore the C code links against ("undefined symbol: _ff_..."). 32-bit Windows (`win-x86`) prefixes too. |
 | `--enable-bsf=extract_extradata` | MPEG-TS and MPEG-PS carry parameter sets in the stream; without this filter the decoder cannot start after a seek ("non-existing PPS"). |
 | `rm -f thumbvideo.lib` | zig writes an import library next to the DLL; nothing uses it. |
 | Threads left enabled | With threads disabled, FFmpeg's static table initialisation is not safe when several threads make their first call at the same time. |

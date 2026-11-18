@@ -14,6 +14,10 @@ internal static class Pdfium
     private static readonly Lock Gate = new();
     private static bool _initialised;
 
+#if NETFRAMEWORK
+    static Pdfium() => NativePreload.Load("pdfium.dll");
+#endif
+
     [DllImport(Dll)] private static extern void FPDF_InitLibrary();
     [DllImport(Dll)] private static extern IntPtr FPDF_LoadMemDocument(IntPtr data, int size, [MarshalAs(UnmanagedType.LPStr)] string? password);
     [DllImport(Dll)] private static extern uint FPDF_GetLastError();
@@ -24,8 +28,8 @@ internal static class Pdfium
     [DllImport(Dll)] private static extern float FPDF_GetPageHeightF(IntPtr page);
     [DllImport(Dll)] private static extern IntPtr FPDFBitmap_CreateEx(int width, int height, int format, IntPtr firstScan, int stride);
     [DllImport(Dll)] private static extern void FPDFBitmap_FillRect(IntPtr bitmap, int left, int top, int width, int height, uint color);
-    [DllImport(Dll)] private static extern unsafe int FPDF_RenderPageBitmap_Start(IntPtr bitmap, IntPtr page, int startX, int startY, int sizeX, int sizeY, int rotate, int flags, Pause* pause);
-    [DllImport(Dll)] private static extern unsafe int FPDF_RenderPage_Continue(IntPtr page, Pause* pause);
+    [DllImport(Dll)] private static extern unsafe int FPDF_RenderPageBitmap_Start(IntPtr bitmap, IntPtr page, int startX, int startY, int sizeX, int sizeY, int rotate, int flags, void* pause);   // a Pause*: .NET Framework will not marshal a pointer to that struct
+    [DllImport(Dll)] private static extern unsafe int FPDF_RenderPage_Continue(IntPtr page, void* pause);
     [DllImport(Dll)] private static extern void FPDF_RenderPage_Close(IntPtr page);
     [DllImport(Dll)] private static extern void FPDFBitmap_Destroy(IntPtr bitmap);
 
@@ -38,7 +42,12 @@ internal static class Pdfium
     private unsafe struct Pause
     {
         public int Version;
+#if NETFRAMEWORK
+        // a function pointer field makes the struct non-blittable on .NET Framework, which may then reorder it in memory
+        public IntPtr NeedToPauseNow;
+#else
         public delegate* unmanaged[Cdecl]<Pause*, int> NeedToPauseNow;
+#endif
         public IntPtr User;
     }
 
@@ -46,8 +55,21 @@ internal static class Pdfium
     /// Pauses only when the call is cancelled. PDFium calls back on the thread that is drawing, which is the thread whose
     /// cancellation <see cref="Guard"/> holds.
     /// </summary>
+#if NET5_0_OR_GREATER
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static unsafe int NeedToPauseNow(Pause* pause) => Guard.Cancellation.IsCancellationRequested ? 1 : 0;
+
+    private static unsafe delegate* unmanaged[Cdecl]<Pause*, int> NeedToPauseNowPointer => &NeedToPauseNow;
+#else
+    // the argument is a Pause*, passed as a plain pointer: .NET Framework will not marshal a pointer to that struct
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] private delegate int NeedToPauseNowFunction(IntPtr pause);
+
+    private static int NeedToPauseNow(IntPtr pause) => Guard.Cancellation.IsCancellationRequested ? 1 : 0;
+
+    // kept for the life of the type, so the thunk PDFium calls is never collected
+    private static readonly NeedToPauseNowFunction NeedToPauseNowDelegate = NeedToPauseNow;
+    private static IntPtr NeedToPauseNowPointer => Marshal.GetFunctionPointerForDelegate(NeedToPauseNowDelegate);
+#endif
 
     public static SKBitmap RenderFirstPage(byte[] pdf, int longSide, out int fullWidth, out int fullHeight)
         => RenderPage(pdf, 0, longSide, out fullWidth, out fullHeight, out _);
@@ -252,7 +274,7 @@ internal static class Pdfium
                         {
                             FPDFBitmap_FillRect(target, 0, 0, bitmap.Width, bitmap.Height, 0xFFFFFFFF);
                             // drawn progressively so that a cancelled call stops mid-page and lets go of the lock
-                            var pause = new Pause { Version = 1, NeedToPauseNow = &NeedToPauseNow };
+                            var pause = new Pause { Version = 1, NeedToPauseNow = NeedToPauseNowPointer };
                             try
                             {
                                 var status = FPDF_RenderPageBitmap_Start(target, page, 0, 0, bitmap.Width, bitmap.Height, 0, FlagAnnotations, &pause);

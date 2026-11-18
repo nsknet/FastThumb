@@ -16,7 +16,9 @@ namespace FastThumb;
 /// </summary>
 internal static class FormatDetector
 {
-    static FormatDetector() => Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+#if !NETFRAMEWORK
+    static FormatDetector() => Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);   // .NET Framework has every code page built in
+#endif
 
     /// <summary>The extensions of every format read here; the content decides the format, these are what the files are usually called.</summary>
     public static readonly IReadOnlyCollection<string> Extensions = new SortedSet<string>(StringComparer.Ordinal)

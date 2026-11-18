@@ -9,7 +9,7 @@
   <a href="https://www.nuget.org/packages/FastThumb"><img src="https://img.shields.io/nuget/v/FastThumb.svg" alt="NuGet"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-brightgreen.svg" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/price-free-brightgreen.svg" alt="Free">
-  <img src="https://img.shields.io/badge/.NET-8%20%7C%2010-512BD4.svg" alt=".NET 8 | 10">
+  <img src="https://img.shields.io/badge/.NET-Framework%204.6.2%2B%20%7C%206%2B-512BD4.svg" alt=".NET Framework 4.6.2+ | .NET 6+">
   <img src="https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS-0ea5e9.svg" alt="Windows | Linux | macOS">
 </p>
 
@@ -35,7 +35,7 @@ FFmpeg build. Every input is treated as untrusted and is processed within explic
 |---|---|
 | ⚡ **Fast** | One read, one layout, one raster. Every thumbnail size is encoded in parallel on its own core. |
 | 🪶 **Lightweight** | `dotnet add package FastThumb` and you are done. No office suite weighing hundreds of MB to install, patch and babysit, no browser, no daemon. |
-| 🧩 **Modern** | Async, cancellable, thread-safe, DI-friendly, immutable options, .NET 8 and .NET 10, x64 and arm64. |
+| 🧩 **Modern** | Async, cancellable, thread-safe, DI-friendly, immutable options. .NET 6, 8, 10 and later, and .NET Framework 4.6.2+; x86, x64 and arm64. |
 | 🛡️ **Safe by default** | Built for untrusted uploads: no macros, no scripts, no network, hard limits on size, depth, pages and time. |
 | 💸 **Free and open source** | MIT license. Read the code, fork it, ship it in closed-source products. No per-server or per-document fees. |
 
@@ -130,7 +130,9 @@ The full list, with what is rendered and the known limitations of each reader, i
 dotnet add package FastThumb
 ```
 
-The package targets **.NET 8** and **.NET 10** and carries the native libraries for all supported platforms.
+The package targets **.NET Framework 4.6.2**, **.NET 6**, **.NET 8** and **.NET 10** (so every later .NET too) and
+carries the native libraries for all supported platforms. .NET Framework applications need a platform target: see
+[.NET Framework](#net-framework).
 
 The repository also contains a command-line tool, `fastthumb`, as a worked example and for trying formats and
 platforms. It is built from source and is not published as a package: see [Command-line tool](#command-line-tool).
@@ -370,7 +372,7 @@ See [docs/linux.md](docs/linux.md) for fonts, base images and container advice.
 
 | Platform | Runtime identifiers | Notes |
 |---|---|---|
-| Windows | `win-x64`, `win-arm64` | |
+| Windows | `win-x64`, `win-arm64`, `win-x86` | `win-x86`: 32-bit .NET Framework processes. |
 | Linux | `linux-x64`, `linux-arm64` | glibc-based distributions (Debian, Ubuntu, RHEL, ...). musl/Alpine is not supported. Needs fontconfig and fonts, see [docs/linux.md](docs/linux.md). |
 | macOS | `osx-x64`, `osx-arm64` | macOS 11 or later. |
 
@@ -378,6 +380,27 @@ See [docs/linux.md](docs/linux.md) for fonts, base images and container advice.
 
 Images are identical on .NET 8 and .NET 10. Preview PDFs have identical content, but their compressed bytes differ
 (.NET 10 compresses with zlib-ng, .NET 8 with the runtime's zlib).
+
+| Target framework | Used by | Notes |
+|---|---|---|
+| `net10.0` | .NET 10 and later | |
+| `net8.0` | .NET 8 and .NET 9 | |
+| `net6.0` | .NET 6 and .NET 7 | Both are out of support from Microsoft. Markdown regular expressions are compiled at first use instead of generated at build time. |
+| `net462` | .NET Framework 4.6.2 to 4.8.1 | Windows only. |
+
+### .NET Framework
+
+The `net462` build runs on .NET Framework 4.6.2 to 4.8.1, on Windows only, as a 32-bit (x86) or 64-bit (x64, arm64)
+process. Set the project's platform target to `x64`, `x86` or `ARM64`: .NET Framework has no `runtimes/<rid>` lookup, so
+the platform target decides which native libraries are copied next to the application, and an `AnyCPU` build can copy
+32-bit libraries into a 64-bit process.
+
+```xml
+<PlatformTarget>x64</PlatformTarget>
+```
+
+Thumbnails are the same as on .NET apart from sub-pixel differences in text, and the work is noticeably slower than on
+.NET 8 or later. Prefer .NET 8+ for a server that makes many thumbnails.
 
 ## Security
 
@@ -389,7 +412,8 @@ thumbnail generation in an isolated, resource-limited worker process or containe
 
 ## Building from source
 
-Requirements: the .NET 10 SDK (see [global.json](global.json)), plus the .NET 8 runtime to run the `net8.0` tests.
+Requirements: the .NET 10 SDK (see [global.json](global.json)), plus the .NET 6 and .NET 8 runtimes to run the `net6.0`
+and `net8.0` tests. On Windows the tests also run on .NET Framework (`net472`).
 
 ```bash
 dotnet build FastThumb.slnx -c Release
@@ -400,7 +424,7 @@ The video library `thumbvideo` is a native build output and is not committed (`s
 git-ignored). CI builds it for all six runtime identifiers; locally, build it for your platform with
 
 ```bash
-sh native/thumbvideo/build.sh linux-x64     # or win-x64, win-arm64, linux-arm64, osx-x64, osx-arm64
+sh native/thumbvideo/build.sh linux-x64     # or win-x86, win-x64, win-arm64, linux-arm64, osx-x64, osx-arm64
 ```
 
 which needs zig, make, git, meson, ninja and, for the x64 targets, nasm; see [docs/native.md](docs/native.md).

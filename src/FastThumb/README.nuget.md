@@ -2,7 +2,7 @@
 
 [![NuGet](https://img.shields.io/nuget/v/FastThumb.svg)](https://www.nuget.org/packages/FastThumb)
 [![License: MIT](https://img.shields.io/badge/license-MIT-brightgreen.svg)](https://github.com/nsknet/FastThumb/blob/main/LICENSE)
-![.NET 8 | 10](https://img.shields.io/badge/.NET-8%20%7C%2010-512BD4.svg)
+![.NET Framework 4.6.2+ | .NET 6+](https://img.shields.io/badge/.NET-Framework%204.6.2%2B%20%7C%206%2B-512BD4.svg)
 ![Windows | Linux | macOS](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20macOS-0ea5e9.svg)
 
 **Thumbnails for 40+ file formats with one method call.** Office documents, spreadsheets, presentations, PDF, e-books,
@@ -17,7 +17,7 @@ var result = ThumbnailGenerator.Default.GenerateFromFile("deck.pptx");   // thum
 
 - ⚡ **Fast**: one read, one layout, one raster; every thumbnail size is encoded in parallel.
 - 🪶 **Lightweight**: just this package, no office suite to install and babysit, no browser, no daemon.
-- 🧩 **Modern**: async, cancellable, thread-safe, DI-friendly, immutable options, .NET 8 and .NET 10, x64 and arm64.
+- 🧩 **Modern**: async, cancellable, thread-safe, DI-friendly, immutable options. .NET 6, 8, 10 and later, and .NET Framework 4.6.2+; x86, x64 and arm64.
 - 🛡️ **Safe by default**: built for untrusted uploads, with no macros, no scripts, no network and hard resource limits.
 - 💸 **Free**: MIT license, usable in closed-source products, no per-server or per-document fees.
 
@@ -72,8 +72,12 @@ var result = new ThumbnailGenerator(options).GenerateFromFile("report.docx");
 
 ## Platforms
 
-Windows, Linux (glibc) and macOS, x64 and arm64; the native libraries for all of them are in the package. Linux needs
-fontconfig and fonts: see [docs/linux.md](https://github.com/nsknet/FastThumb/blob/main/docs/linux.md).
+Windows, Linux (glibc) and macOS, x64 and arm64, plus 32-bit Windows; the native libraries for all of them are in the
+package. Linux needs fontconfig and fonts: see [docs/linux.md](https://github.com/nsknet/FastThumb/blob/main/docs/linux.md).
+
+Target frameworks: `net10.0`, `net8.0`, `net6.0` (.NET 6 and 7) and `net462` (.NET Framework 4.6.2 to 4.8.1, Windows).
+On .NET Framework set `<PlatformTarget>` to `x64`, `x86` or `ARM64`, so the native libraries copied next to the
+application match the process.
 
 ## Security
 

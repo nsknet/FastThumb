@@ -27,7 +27,7 @@ pdfium     renders a page: yes
 
 | RID | thumbvideo file | Minimum system |
 |---|---|---|
-| `win-x64`, `win-arm64` | `thumbvideo.dll` | Depends only on the Universal C Runtime, `KERNEL32.dll` and `bcrypt.dll` |
+| `win-x86`, `win-x64`, `win-arm64` | `thumbvideo.dll` | Depends only on the Universal C Runtime, `KERNEL32.dll` and `bcrypt.dll`. `win-x86` serves 32-bit .NET Framework processes. |
 | `linux-x64`, `linux-arm64` | `libthumbvideo.so` | glibc 2.17 or later (the other native packages may require a newer glibc, see [linux.md](linux.md)) |
 | `osx-x64`, `osx-arm64` | `libthumbvideo.dylib` | macOS 11 or later |
 
@@ -36,9 +36,15 @@ musl-based distributions (Alpine) are not supported.
 ## How thumbvideo is found
 
 The library lives at `runtimes/<rid>/native/` next to the application; the FastThumb NuGet package carries it at
-that path for all six runtime identifiers. At run time, `Video/VideoFrame.cs` looks for
+that path for all seven runtime identifiers. At run time, `Video/VideoFrame.cs` looks for
 `runtimes/<os>-<arch>/native/<file>` under the application base directory, then for the file directly in the
 application base directory, and otherwise falls back to the default native library probing of .NET.
+
+.NET Framework reads neither `runtimes/<rid>` nor a DllImport resolver. The package's
+`buildTransitive/net462/FastThumb.targets` copies every Windows build to `x86\`, `x64\` and `arm64\` next to the
+application, and `Polyfills/NativePreload.cs` loads thumbvideo and PDFium by full path before their first call: from the
+folder named after the process architecture, then `runtimes\win-<arch>\native\`, then the application folder (an ASP.NET
+application's `bin` folder first).
 
 If the library is missing, everything except video keeps working; a video input fails with `UnsupportedFormatException`.
 
@@ -65,7 +71,7 @@ Windows with Git Bash).
 sh native/thumbvideo/build.sh <rid>
 ```
 
-`<rid>` is one of `win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`. The output is written
+`<rid>` is one of `win-x86`, `win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`. The output is written
 to `src/FastThumb/runtimes/<rid>/native/`.
 
 ### Tools
@@ -150,7 +156,8 @@ dotnet test FastThumb.slnx -c Release
 
 - [ci.yml](../.github/workflows/ci.yml): a formatting check (`dotnet format --verify-no-changes`); the native build;
   build and tests on `ubuntu-24.04`, `ubuntu-24.04-arm`, `windows-2025`, `windows-11-arm`, `macos-15` and
-  `macos-15-intel` (x64 and arm64 on each platform); a package job that packs both packages, checks the package
+  `macos-15-intel` (x64 and arm64 on each platform), for every target framework of the tests (`net6.0`, `net8.0`,
+  `net10.0`, and `net472` on Windows); a package job that packs both packages, checks the package
   layout with [eng/check-package.sh](../eng/check-package.sh) and installs them into a fresh application and tool
   with [eng/smoke/run.sh](../eng/smoke/run.sh); and a Docker job that builds the image and runs `fastthumb info` in
   it.
