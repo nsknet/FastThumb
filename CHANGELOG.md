@@ -5,6 +5,30 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Adobe Illustrator**: PostScript-based `.ai` files (Illustrator 8 and older) and EPS files Illustrator wrote without a
+  preview are drawn from Illustrator's own drawing operators (paths, fills, strokes, compound paths, clipping groups,
+  colours, dashes; hidden layers left out; no text, gradients or images); a file with an Illustrator thumbnail shows it.
+  Such files were laid out as text before. A PDF-based `.ai` saved without PDF content shows its XMP thumbnail instead of
+  Illustrator's notice page. `.ai` is in `SupportedExtensions`.
+- **Layered Photoshop files**: a PSD or PSB saved with "Maximize Compatibility" off (image resource 1057) no longer shows
+  its white placeholder composite: its layers are composited (stored pixels, transparency, masks, opacity, fill,
+  visibility, clipping, groups, six common blend modes), with the embedded thumbnail as fallback.
+- **OpenDocument drawings**: `DocumentFormat.Odg` (`.odg`, `.otg`) and `DocumentFormat.Fodg` (`.fodg`), drawn page by page
+  with a preview PDF. They were read as text documents before.
+- **SVGZ**: gzip-compressed SVG, inflated within `ResourceLimits.MaxInputBytes`.
+- **CorelDRAW** (`.cdr`): the preview picture of RIFF drawings and of X4+ packages.
+- **DICOM** (`.dcm`, `.dicom`): the first frame, uncompressed, RLE, JPEG baseline/extended or JPEG 2000, with the
+  modality rescale, window and MONOCHROME1 inversion.
+
+### Changed
+
+- **BMP is recognised by content**: its headers are checked, so a BMP without a `.bmp` name is an image instead of being
+  laid out as text.
+
 ## [1.4.0] - 2026-11-13
 
 ### Added

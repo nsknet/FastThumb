@@ -7,7 +7,7 @@ reported as `ThumbnailResult.Format` (a `DocumentFormat` value), and `ThumbnailG
 the usual extensions.
 
 Thumbnails are made from the first page. A preview PDF of every page is produced for every format in the
-"Documents", "Spreadsheets", "Presentations" and XPS sections; PDF, image and video inputs have no preview PDF.
+"Documents", "Spreadsheets", "Presentations and drawings" and XPS sections; PDF, image and video inputs have no preview PDF.
 
 Fidelity is aimed at thumbnails and previews: layout, fonts, colours, tables and pictures are reproduced closely
 enough to recognise a document, but FastThumb is not a full office suite. The limitations below are the known gaps.
@@ -56,9 +56,9 @@ Number formats cover General, fixed decimals, thousands separators, percent, sci
 prefixes and suffixes, negative and zero sections, and date and time patterns, with en-US symbols. Fractions and
 conditional sections fall back to General.
 
-## Presentations
+## Presentations and drawings
 
-One page per slide, at the presentation's slide size, up to 1000 slides.
+One page per slide or drawing page, at the document's page size, up to 1000 pages.
 
 | Format | `DocumentFormat` | Extensions | Rendered | Not rendered / limitations |
 |---|---|---|---|---|
@@ -66,12 +66,14 @@ One page per slide, at the presentation's slide size, up to 1000 slides.
 | PowerPoint 97-2003 | `Ppt` | `.ppt`, `.pps`, `.pot` | Shape anchors (including nested groups), fills, outlines, pictures and text with paragraph and character runs on top of the master's text styles | Master shapes and backgrounds. PowerPoint 95 files are rejected |
 | OpenDocument presentation | `Odp` | `.odp`, `.otp` | Pages, frames, shapes, pictures, text with ODF styles | Master-page decoration |
 | Flat OpenDocument presentation | `Fodp` | `.fodp` | Same as ODP, from a single XML file | Same as ODP |
+| OpenDocument drawing | `Odg` | `.odg`, `.otg` | Same as ODP: every drawing page with its shapes, pictures and text, at the drawing's page size | Same as ODP |
+| Flat OpenDocument drawing | `Fodg` | `.fodg` | Same as ODG, from a single XML file | Same as ODG |
 
 ## Fixed-layout documents
 
 | Format | `DocumentFormat` | Extensions | Rendered | Not rendered / limitations |
 |---|---|---|---|---|
-| PDF | `Pdf` | `.pdf` | Page 1 rendered by PDFium, including annotations. The full-size image is the page at 72 DPI. `PageCount` is the document's page count | No preview PDF (the input already is one). Password-protected PDFs fail with `InvalidDocumentException`. No JavaScript or XFA forms |
+| PDF | `Pdf` | `.pdf`; also `.ai` from Illustrator 9 on | Page 1 rendered by PDFium, including annotations. The full-size image is the page at 72 DPI. `PageCount` is the document's page count. An Illustrator file saved with "Create PDF Compatible File" off (its only page is a notice) shows the thumbnail Illustrator keeps in its XMP metadata instead (about 256 px) | No preview PDF (the input already is one). Password-protected PDFs fail with `InvalidDocumentException`. No JavaScript or XFA forms. An Illustrator file without PDF content and without an XMP thumbnail fails with `UnsupportedFormatException` |
 | XPS / OpenXPS | `Xps` | `.xps`, `.oxps` | Nested canvases with transforms and opacity, glyph runs with embedded (including obfuscated) fonts, explicit glyph indices, advances and offsets, paths, solid and image brushes, resource dictionaries. Up to 500 pages | Gradients use their first stop; clipping and tiling are ignored |
 
 ## Images
@@ -79,10 +81,11 @@ One page per slide, at the presentation's slide size, up to 1000 slides.
 Images are decoded by libvips (BMP and ICO by Skia), EXIF orientation is applied, and they are never enlarged. A
 picture larger than `ResourceLimits.MaxPixels` is rejected with `ResourceLimitExceededException` before it is decoded.
 
-PSD, TGA, EPS, camera RAW and JPEG 2000 have no loader in the bundled libvips or in Skia. FastThumb reads them in managed
-code, with no added dependency. Where drawing the file would take a whole engine, it uses the picture the file already
-carries: the composite image of a PSD, the preview of an EPS, the JPEG preview of a RAW file. Embedded JPEG and TIFF
-previews are then decoded by libvips like any other image.
+PSD, TGA, EPS, PostScript-based Illustrator, camera RAW, JPEG 2000, CorelDRAW and DICOM have no loader in the bundled
+libvips or in Skia. FastThumb reads them in managed code, with no added dependency. Where drawing the file would take a
+whole engine, it uses the picture the file already carries: the composite image of a PSD, the preview of an EPS, the
+JPEG preview of a RAW file, the preview of a CorelDRAW drawing. Embedded JPEG, TIFF, PNG and BMP previews are then
+decoded by libvips (BMP by Skia) like any other image.
 
 | Format | Extensions | Notes |
 |---|---|---|
@@ -93,12 +96,16 @@ previews are then decoded by libvips like any other image.
 | TIFF | `.tif`, `.tiff` | First page |
 | HEIF / AVIF | `.heic`, `.heif`, `.avif` | Recognised by the still-image brands of the ISO media container. Decoding depends on the codecs included in the libvips build shipped by NetVips.Native; an image whose codec is missing fails with `UnsupportedFormatException` |
 | SVG | `.svg` | Recognised by extension only. Rendered by librsvg from memory, with no base URI (no external files or URLs) |
-| BMP | `.bmp` | Recognised by extension only |
+| Compressed SVG | `.svgz` | Recognised by the gzip signature and the extension. Inflated in memory within `ResourceLimits.MaxInputBytes` (a larger result fails with `ResourceLimitExceededException`), then drawn as SVG |
+| BMP | `.bmp` | Recognised by its headers (the "BM" signature, a known header size, one plane, a BMP bit depth) whatever the name, and by extension otherwise. Windows and OS/2 bitmaps, 1 to 32 bits, RLE4/RLE8, bit fields, top-down |
 | ICO | `.ico` | Recognised by extension only |
-| Photoshop PSD / PSB | `.psd`, `.psb` | The composite image Photoshop stores after the layers; layers are not composited. Bitmap, greyscale, duotone (as grey), indexed, RGB, CMYK (converted without a colour profile) and Lab, at 1, 8 or 16 bits, raw, PackBits or ZIP. Transparency only when the file marks the composite as transparent. 32-bit and multichannel files use the JPEG thumbnail in the image resources (about 160 px), or fail with `UnsupportedFormatException` without one |
+| Photoshop PSD / PSB | `.psd`, `.psb` | The composite image Photoshop stores after the layers. A file saved with "Maximize Compatibility" off stores only a placeholder there (image resource 1057 says so): its layers are composited instead, from the pixels each layer stores, with transparency, user masks, opacity and fill opacity, visibility, clipping, groups (blended as one, or passed through) and the normal, multiply, screen, overlay, darken and lighten blend modes (other modes are drawn as normal). Layer effects, adjustment and fill layers, vector masks and smart-object settings are not applied; layers of 32-bit files are not composited, and a file whose layers cannot be read shows its thumbnail. Bitmap, greyscale, duotone (as grey), indexed, RGB, CMYK (converted without a colour profile) and Lab, at 1, 8 or 16 bits, raw, PackBits or ZIP. Transparency only when the file marks the composite as transparent. 32-bit and multichannel files use the JPEG thumbnail in the image resources (about 160 px), or fail with `UnsupportedFormatException` without one |
 | TGA | `.tga` | Recognised by extension, or by the TGA 2.0 footer. Colour-mapped, true-colour and greyscale, plain or run-length encoded, 8 to 32 bits |
-| EPS | `.eps`, `.epsf`, `.epsi` | The preview the file carries: the TIFF of a DOS EPS, an EPSI preview, or Illustrator's thumbnail. PostScript itself is not drawn (that needs a PostScript interpreter): an EPS without a preview fails with `UnsupportedFormatException`. `Inspect` reads the size from `%%BoundingBox`, in points. Plain PostScript (`.ps`) is not an image |
+| EPS | `.eps`, `.epsf`, `.epsi` | The preview the file carries: the TIFF of a DOS EPS, an EPSI preview, a Photoshop or an Illustrator thumbnail. PostScript itself is not drawn (that needs a PostScript interpreter): an EPS without a preview fails with `UnsupportedFormatException`, except one Illustrator wrote, whose artwork is drawn from its paths (see the next row). `Inspect` reads the size from `%%BoundingBox`, in points. Plain PostScript (`.ps`) is not an image |
+| Illustrator, PostScript-based | `.ai` (Illustrator 8 and older) | Recognised by the extension, or by an Illustrator `%%Creator` or `%AIn_` comment. Illustrator's thumbnail if the file has one; otherwise the artwork drawn from Illustrator's own drawing operators: paths, fills and strokes, compound paths, clipping groups, grey, CMYK, custom and RGB colours, line width, joins, caps and dashes; hidden layers and guides are left out. Text, gradients, patterns and placed or raster images are not drawn. The page is `%%HiResBoundingBox` or `%%BoundingBox`, on white. Illustrator 9 and later write PDF-based files, which are read as PDF |
 | Camera RAW | `.cr2`, `.cr3`, `.nef`, `.nrw`, `.arw`, `.srf`, `.sr2`, `.dng`, `.orf`, `.rw2`, `.raf`, `.pef`, `.srw`, `.erf`, `.3fr` and more | The largest JPEG preview in the file, turned by the RAW file's orientation; the sensor data is not developed. ORF, RW2, RAF, CR3, CR2 and DNG are recognised by content; other TIFF-based RAW files (NEF, ARW, PEF...) need their extension, and without it are read as TIFF. A RAW file without a JPEG preview fails with `UnsupportedFormatException`, or, if it is a standard TIFF, shows its first TIFF image |
+| CorelDRAW | `.cdr` | The preview the drawing carries; the vector content is not drawn. A RIFF drawing (up to X3) shows the bitmap of its DISP chunk; a package (X4 and later, a ZIP) the image under `previews/`, else the DISP chunk of the document inside it. Previews are small (typically 128 to 256 px). A drawing without one fails with `UnsupportedFormatException` |
+| DICOM | `.dcm`, `.dicom` | Part 10 files (with the "DICM" preamble). The first frame: uncompressed (implicit or explicit VR, little or big endian), RLE Lossless, JPEG baseline/extended and JPEG 2000. Monochrome images go through the modality rescale and the file's first window (else the frame's own range) to 8 bits; MONOCHROME1 is inverted; RGB and YBR_FULL are shown in colour. JPEG lossless, JPEG-LS, palette colour and deflated data sets fail with `UnsupportedFormatException` |
 | JPEG 2000 | `.jp2`, `.j2k`, `.j2c`, `.jpf`, `.jpx` | JP2 files and raw codestreams, Part 1: both wavelets, every progression order, quality layers, tiles, precincts, subsampled components, sYCC, alpha. Decoded at the smallest resolution the requested sizes need, so a thumbnail of a large picture skips most of the work; with `IncludeFullSize` the whole picture is decoded. A picture larger than `MaxPixels` is decoded at a reduced resolution that fits instead of being refused. Progression order changes (POC) and packed packet headers (PPM, PPT) are read. Palette images fail with `UnsupportedFormatException` |
 
 All image formats report `DocumentFormat.Image`.

@@ -30,9 +30,9 @@ var result = ThumbnailGenerator.Default.GenerateFromFile("deck.pptx");   // thum
 | E-books and help | EPUB, MOBI/AZW/AZW3, CHM |
 | Legacy (text only) | HWP 5.x, WordPerfect 6+, Microsoft Works |
 | Spreadsheets | XLSX/XLSM/XLTX, XLSB, XLS, ODS/OTS, CSV/TSV |
-| Presentations | PPTX/PPTM/POTX/PPSX, PPT/PPS/POT, ODP/OTP, FODP |
+| Presentations and drawings | PPTX/PPTM/POTX/PPSX, PPT/PPS/POT, ODP/OTP, FODP, ODG/OTG, FODG |
 | Fixed layout | PDF, XPS/OXPS |
-| Images | JPEG, PNG, GIF, WebP, TIFF, HEIF/AVIF, SVG, BMP, ICO, PSD/PSB, TGA, EPS, camera RAW, JPEG 2000 |
+| Images | JPEG, PNG, GIF, WebP, TIFF, HEIF/AVIF, SVG/SVGZ, BMP, ICO, PSD/PSB (layers composited when the file has no real composite), TGA, EPS (its preview), Illustrator AI (PDF-based, or PostScript-based: its thumbnail or paths), camera RAW (its JPEG preview), JPEG 2000, CorelDRAW CDR (its preview), DICOM |
 | Video | MP4/MOV/M4V/3GP, Matroska/WebM, AVI, FLV, ASF/WMV, MPEG-PS/TS, Ogg, RealMedia, MXF and more |
 
 Details and limitations: [docs/formats.md](https://github.com/nsknet/FastThumb/blob/main/docs/formats.md).

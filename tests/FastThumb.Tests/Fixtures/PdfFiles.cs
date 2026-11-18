@@ -50,7 +50,7 @@ internal static class PdfFiles
         ]);
     }
 
-    private static byte[] Write(List<string> objects, int? infoId = null)
+    internal static byte[] Write(List<string> objects, int? infoId = null)
     {
         var output = new StringBuilder("%PDF-1.4\n%âãÏÓ\n");
         var offsets = new List<int>();

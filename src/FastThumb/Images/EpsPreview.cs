@@ -8,20 +8,26 @@ namespace FastThumb.Images;
 /// Encapsulated PostScript, by the preview it carries: drawing the PostScript itself takes a PostScript interpreter, which this
 /// library does not have. In order of preference: the TIFF of a DOS EPS (binary header C5 D0 D3 C6) unless it is 1-bit, an
 /// EPSI preview of 8 bits or more, the thumbnail of a Photoshop EPS (its image resources, in hex), the colour thumbnail
-/// Illustrator writes (%AI7_Thumbnail), then 1-bit previews (TIFF, EPSI). With none, the file is refused; its size is still
-/// known from %%BoundingBox.
+/// Illustrator writes (%AI7_Thumbnail), then, for a file Illustrator wrote (EPS or PostScript-based .ai), its artwork drawn
+/// from its paths (<see cref="AiPaths"/>), then 1-bit previews (TIFF, EPSI). With none, the file is refused; its size is
+/// still known from %%BoundingBox.
 /// </summary>
 internal static class EpsPreview
 {
     private static ReadOnlySpan<byte> DosSignature => [0xC5, 0xD0, 0xD3, 0xC6];
 
+    /// <summary>
+    /// A DOS EPS; a PostScript file that says it is EPS on its first line, that Illustrator wrote (a PostScript-based .ai file
+    /// is the same language), or that is named as either. A PDF-based .ai file starts with %PDF and is read as a PDF.
+    /// </summary>
     public static bool Claims(ReadOnlySpan<byte> d, string? extension)
     {
         if (d.Length >= 4 && d[..4].SequenceEqual(DosSignature)) return true;
-        if (!d.StartsWith("%!PS-Adobe-"u8)) return d.StartsWith("%!"u8) && (extension ?? "").ToLowerInvariant() is ".eps" or ".epsf" or ".epsi";
+        var named = (extension ?? "").ToLowerInvariant() is ".eps" or ".epsf" or ".epsi" or ".ai";
+        if (!d.StartsWith("%!PS-Adobe-"u8)) return d.StartsWith("%!"u8) && named;
         var line = d[..Math.Min(d.Length, 80)];
         var end = line.IndexOfAny((byte)'\r', (byte)'\n');
-        return (end < 0 ? line : line[..end]).IndexOf(" EPSF"u8) >= 0 || (extension ?? "").ToLowerInvariant() is ".eps" or ".epsf" or ".epsi";
+        return (end < 0 ? line : line[..end]).IndexOf(" EPSF"u8) >= 0 || named || AiPaths.IsIllustrator(d);
     }
 
     /// <summary>The PostScript section, and the TIFF preview of a DOS EPS, if any.</summary>
@@ -64,6 +70,8 @@ internal static class EpsPreview
         if (tiff != null && !oneBit) return ManagedImages.Embedded(tiff, request);
         var preview = Epsi(ps, request, minDepth: 8) ?? Photoshop(ps, request) ?? Illustrator(ps, request);
         if (preview != null) return preview;
+        // no picture of its own: Illustrator's artwork is drawn from its paths, still better than a 1-bit stand-in
+        if (AiPaths.IsIllustrator(ps)) return AiPaths.Render(ps, request);
         if (tiff != null) return ManagedImages.Embedded(tiff, request);
         return Epsi(ps, request, minDepth: 1)
             ?? throw new UnsupportedFormatException("The EPS file has no preview to show (drawing PostScript itself needs a PostScript interpreter).");

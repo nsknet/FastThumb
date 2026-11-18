@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Globalization;
 using System.IO.Compression;
 using System.Text;
@@ -23,11 +24,11 @@ internal static class FormatDetector
         ".pdf",
         ".doc", ".dot", ".docx", ".docm", ".dotx", ".dotm", ".xml", ".wml", ".odt", ".ott", ".rtf", ".txt", ".md", ".markdown",
         ".htm", ".html", ".xhtml", ".mht", ".mhtml", ".epub", ".mobi", ".azw", ".azw3", ".chm", ".hwp", ".wpd", ".wps",
-        ".ppt", ".pps", ".pot", ".pptx", ".pptm", ".potx", ".ppsx", ".odp", ".fodp",
+        ".ppt", ".pps", ".pot", ".pptx", ".pptm", ".potx", ".ppsx", ".odp", ".fodp", ".odg", ".otg", ".fodg",
         ".xls", ".xlsx", ".xlsm", ".xltx", ".xlsb", ".csv", ".tsv", ".ods",
         ".xps", ".oxps",
-        ".jpg", ".jpeg", ".png", ".gif", ".webp", ".tif", ".tiff", ".heic", ".heif", ".avif", ".bmp", ".svg", ".ico",
-        ".psd", ".psb", ".tga", ".eps", ".epsf", ".epsi", ".jp2", ".j2k", ".j2c", ".jpf", ".jpx",
+        ".jpg", ".jpeg", ".png", ".gif", ".webp", ".tif", ".tiff", ".heic", ".heif", ".avif", ".bmp", ".svg", ".svgz", ".ico",
+        ".psd", ".psb", ".tga", ".eps", ".epsf", ".epsi", ".ai", ".jp2", ".j2k", ".j2c", ".jpf", ".jpx", ".cdr", ".dcm", ".dicom",
         ".cr2", ".cr3", ".nef", ".nrw", ".arw", ".srf", ".sr2", ".dng", ".orf", ".rw2", ".raf", ".pef", ".srw", ".erf", ".3fr",
         ".mp4", ".m4v", ".mov", ".3gp", ".3g2", ".f4v", ".mkv", ".webm", ".avi", ".flv", ".asf", ".wmv", ".mpg", ".mpeg", ".mpe", ".m2v",
         ".vob", ".m2ts", ".ogv", ".ogg", ".rm", ".rmvb", ".mxf", ".vivo", ".viv", ".roq",
@@ -68,6 +69,7 @@ internal static class FormatDetector
                 var mimeType = Encoding.UTF8.GetString(buffer, 0, length);
                 if (mimeType.Contains("presentation", StringComparison.Ordinal)) return DocumentFormat.Odp;
                 if (mimeType.Contains("spreadsheet", StringComparison.Ordinal)) return DocumentFormat.Ods;
+                if (mimeType.Contains("graphics", StringComparison.Ordinal)) return DocumentFormat.Odg;
             }
             if (zip.Entries.Any(e => e.FullName.EndsWith(".fpage", StringComparison.OrdinalIgnoreCase) || e.FullName.EndsWith(".fdseq", StringComparison.OrdinalIgnoreCase))) return DocumentFormat.Xps;
             if (zip.GetEntry("META-INF/container.xml") != null) return DocumentFormat.Epub;
@@ -79,6 +81,7 @@ internal static class FormatDetector
         if (head.StartsWith("{\\rtf", StringComparison.Ordinal)) return DocumentFormat.Rtf;
         if (head.Contains("<pkg:package", StringComparison.Ordinal)) return DocumentFormat.FlatOpc;
         if (head.Contains("office:document", StringComparison.Ordinal) && head.Contains("opendocument.presentation", StringComparison.Ordinal)) return DocumentFormat.Fodp;
+        if (head.Contains("office:document", StringComparison.Ordinal) && head.Contains("opendocument.graphics", StringComparison.Ordinal)) return DocumentFormat.Fodg;
         if (head.Contains("<w:wordDocument", StringComparison.Ordinal)) return DocumentFormat.WordMl;
         if (head.StartsWith("MIME-Version:", StringComparison.OrdinalIgnoreCase) || (head.Contains("MIME-Version:", StringComparison.OrdinalIgnoreCase) && head.Contains("multipart/", StringComparison.OrdinalIgnoreCase))) return DocumentFormat.Mhtml;
         if (head.Contains("<html", StringComparison.OrdinalIgnoreCase) || head.StartsWith("<!DOCTYPE html", StringComparison.OrdinalIgnoreCase)) return DocumentFormat.Html;
@@ -93,7 +96,9 @@ internal static class FormatDetector
         };
     }
 
-    public static bool IsSlides(DocumentFormat format) => format is DocumentFormat.Pptx or DocumentFormat.Ppt or DocumentFormat.Odp or DocumentFormat.Fodp;
+    /// <summary>Formats laid out as a deck of fixed pages of shapes: presentations, and OpenDocument drawings.</summary>
+    public static bool IsSlides(DocumentFormat format) => format is DocumentFormat.Pptx or DocumentFormat.Ppt or DocumentFormat.Odp or DocumentFormat.Fodp
+        or DocumentFormat.Odg or DocumentFormat.Fodg;
 
     public static bool IsSheets(DocumentFormat format) => format is DocumentFormat.Xlsx or DocumentFormat.Xls or DocumentFormat.Csv or DocumentFormat.Ods or DocumentFormat.Xlsb;
 
@@ -108,8 +113,26 @@ internal static class FormatDetector
         if (d[0] == 'R' && d[1] == 'I' && d[2] == 'F' && d[3] == 'F' && d[8] == 'W' && d[9] == 'E' && d[10] == 'B' && d[11] == 'P') return true; // WebP
         if (d[4] == 'f' && d[5] == 't' && d[6] == 'y' && d[7] == 'p'                                            // ISO media: only the still-image brands
             && Encoding.ASCII.GetString(d.Slice(8, 4)) is "heic" or "heix" or "hevc" or "mif1" or "msf1" or "avif" or "avis") return true;
-        if (Images.ManagedImages.Claims(d, extension)) return true;                                              // PSD, TGA, EPS, RAW, JPEG 2000
+        if (IsBmp(d)) return true;
+        if (Images.ManagedImages.Claims(d, extension)) return true;                                              // PSD, TGA, EPS, AI, RAW, JPEG 2000, CDR, DICOM
+        if (d[0] == 0x1F && d[1] == 0x8B) return (extension ?? "").ToLowerInvariant() == ".svgz";               // gzip: only a compressed SVG is an image
         return (extension ?? "").ToLowerInvariant() is ".bmp" or ".svg" or ".ico";   // only what libvips (svg) or Skia (bmp, ico) can actually decode
+    }
+
+    /// <summary>
+    /// A Windows or OS/2 bitmap by its headers: "BM", a known info header size, one plane, a bit depth BMP has and a pixel
+    /// offset past the headers. Two letters alone would claim any text that starts with "BM".
+    /// </summary>
+    public static bool IsBmp(ReadOnlySpan<byte> d)
+    {
+        if (d.Length < 30 || d[0] != 'B' || d[1] != 'M') return false;
+        var offset = BinaryPrimitives.ReadUInt32LittleEndian(d[10..]);
+        var header = BinaryPrimitives.ReadUInt32LittleEndian(d[14..]);
+        if (header is not (12 or 16 or 40 or 52 or 56 or 64 or 108 or 124) || offset < 14 + header) return false;
+        int planes, bits;
+        if (header == 12) (planes, bits) = (BinaryPrimitives.ReadUInt16LittleEndian(d[22..]), BinaryPrimitives.ReadUInt16LittleEndian(d[24..]));
+        else (planes, bits) = (BinaryPrimitives.ReadUInt16LittleEndian(d[26..]), BinaryPrimitives.ReadUInt16LittleEndian(d[28..]));
+        return planes == 1 && bits is 1 or 2 or 4 or 8 or 16 or 24 or 32;
     }
 
     /// <summary>
@@ -159,8 +182,8 @@ internal static class FormatDetector
     {
         DocumentFormat.Pptx => PptxReader.Read(data),
         DocumentFormat.Ppt => PptReader.Read(data),
-        DocumentFormat.Odp => OdpReader.Read(data, flat: false),
-        DocumentFormat.Fodp => OdpReader.Read(data, flat: true),
+        DocumentFormat.Odp or DocumentFormat.Odg => OdpReader.Read(data, flat: false),
+        DocumentFormat.Fodp or DocumentFormat.Fodg => OdpReader.Read(data, flat: true),
         _ => throw new NotSupportedException("Unsupported presentation format"),
     };
 

@@ -30,7 +30,7 @@ internal static class Inspector
             case DocumentFormat.Video:
                 using (var video = new MemoryStream(data, false)) return Video(video, options);
             case DocumentFormat.Image:
-                return Image(data, extension);
+                return Image(Images.ManagedImages.Inflated(data, options.Limits.MaxInputBytes), extension);
             case DocumentFormat.Pdf:
                 return Pdf(data);
         }
@@ -42,11 +42,11 @@ internal static class Inspector
                 case DocumentFormat.Docx or DocumentFormat.Xlsx or DocumentFormat.Pptx or DocumentFormat.Xlsb:
                     OfficeOpenXml(data, info);
                     break;
-                case DocumentFormat.Odt or DocumentFormat.Ods or DocumentFormat.Odp:
+                case DocumentFormat.Odt or DocumentFormat.Ods or DocumentFormat.Odp or DocumentFormat.Odg:
                     using (var zip = new ZipArchive(new MemoryStream(data, false), ZipArchiveMode.Read))
                         if (Xml(zip, "meta.xml") is { } meta) OpenDocument(meta.Root, info);
                     break;
-                case DocumentFormat.Fodp:
+                case DocumentFormat.Fodp or DocumentFormat.Fodg:
                     using (var stream = new MemoryStream(data, false)) OpenDocument(Guard.LoadXml(stream).Root, info);
                     break;
                 case DocumentFormat.Epub:

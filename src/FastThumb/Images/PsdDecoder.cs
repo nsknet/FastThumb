@@ -17,7 +17,14 @@ internal static class PsdDecoder
 
     /// <summary>The sections of the file located, nothing decoded.</summary>
     private readonly record struct Layout(int Width, int Height, int Channels, int Depth, int Mode, bool Large,
-        int Palette, int Resources, int ResourcesLength, bool MergedAlpha, int ImageData);
+        int Palette, int Resources, int ResourcesLength, bool MergedAlpha, int ImageData, int LayerSection, int LayerSectionLength)
+    {
+        /// <summary>
+        /// False when image resource 1057 says the stored composite is not the real picture: the file was saved with
+        /// "Maximize Compatibility" off, and what follows the layers is only a placeholder. Without the resource it is real.
+        /// </summary>
+        public bool RealComposite { get; init; } = true;
+    }
 
     public static (int Width, int Height) Size(byte[] data)
     {
@@ -53,7 +60,28 @@ internal static class PsdDecoder
             var infoLength = large ? Length64(d, ref info) : Length32(d, ref info);
             if (infoLength >= 2) mergedAlpha = BinaryPrimitives.ReadInt16BigEndian(d[info..]) < 0;
         }
-        return new(width, height, channels, depth, mode, large, paletteLength >= 768 ? palette : -1, resources, resourcesLength, mergedAlpha, at);
+        return new(width, height, channels, depth, mode, large, paletteLength >= 768 ? palette : -1, resources, resourcesLength, mergedAlpha, at, layers, layersLength)
+        {
+            RealComposite = Resource(d, resources, resources + resourcesLength, 1057) is not { Length: >= 5 } version || version[4] != 0,
+        };
+    }
+
+    /// <summary>The data of the first image resource <paramref name="wanted"/> between <paramref name="start"/> and <paramref name="end"/>.</summary>
+    private static ReadOnlySpan<byte> Resource(ReadOnlySpan<byte> d, int start, int end, int wanted)
+    {
+        var at = start;
+        while (at + 12 <= end && d.Slice(at, 4).SequenceEqual("8BIM"u8))
+        {
+            var id = BinaryPrimitives.ReadUInt16BigEndian(d[(at + 4)..]);
+            at += 6 + ((d[at + 6] + 2) & ~1);                  // the Pascal name with its length byte, padded to even
+            if (at + 4 > end) break;
+            var size = BinaryPrimitives.ReadUInt32BigEndian(d[at..]);
+            at += 4;
+            if (size > (uint)(end - at)) break;
+            if (id == wanted) return d.Slice(at, (int)size);
+            at += ((int)size + 1) & ~1;
+        }
+        return default;
     }
 
     public static NetVips.Image Decode(byte[] data, DecodeRequest request)
@@ -69,6 +97,16 @@ internal static class PsdDecoder
             4 => psd.Channels >= 4,
             _ => false,                                       // multichannel
         };
+        if (!psd.RealComposite && psd.LayerSectionLength > 0)
+        {
+            // the stored composite is a placeholder: the layers, else the thumbnail, else the placeholder after all
+            try { return PsdLayers.Compose(data, psd.Width, psd.Height, psd.Mode, psd.Depth, psd.Large, psd.LayerSection, psd.LayerSectionLength, request); }
+            catch (Exception e) when (e is UnsupportedFormatException or InvalidDocumentException or IndexOutOfRangeException or ArgumentException
+                or OverflowException or EndOfStreamException or InvalidDataException)
+            {
+                if (Thumbnail(data, psd.Resources, psd.Resources + psd.ResourcesLength, request) is { } thumbnail) return thumbnail;
+            }
+        }
         if (composite) return Composite(data, psd);
         return Thumbnail(data, psd.Resources, psd.Resources + psd.ResourcesLength, request) ?? throw new UnsupportedFormatException(
             $"Photoshop colour mode {psd.Mode} at {psd.Depth} bits has no composite this library reads, and the file has no thumbnail.");
@@ -173,7 +211,7 @@ internal static class PsdDecoder
     }
 
     /// <summary>One row of samples as 8-bit values: 1-bit is black where set, 16-bit keeps its high byte.</summary>
-    private static void Store(ReadOnlySpan<byte> row, int depth, Span<byte> target)
+    internal static void Store(ReadOnlySpan<byte> row, int depth, Span<byte> target)
     {
         switch (depth)
         {
@@ -184,7 +222,7 @@ internal static class PsdDecoder
     }
 
     /// <summary>PackBits: n + 1 literal bytes for n in 0..127, the next byte 1 - n times for n in -127..-1. A short row stays zero.</summary>
-    private static void PackBits(ReadOnlySpan<byte> input, Span<byte> output)
+    internal static void PackBits(ReadOnlySpan<byte> input, Span<byte> output)
     {
         output.Clear();
         int i = 0, o = 0;
@@ -209,7 +247,7 @@ internal static class PsdDecoder
     }
 
     /// <summary>ZIP with prediction: each sample was stored as the difference from the previous one in the row.</summary>
-    private static void Unpredict(Span<byte> row, int depth)
+    internal static void Unpredict(Span<byte> row, int depth)
     {
         if (depth == 16)
             for (var x = 2; x + 1 < row.Length; x += 2)
@@ -219,7 +257,7 @@ internal static class PsdDecoder
     }
 
     /// <summary>CIE L*a*b* (D50, as Photoshop stores it) to sRGB.</summary>
-    private static void Lab(byte l, byte a, byte b, Span<byte> rgb)
+    internal static void Lab(byte l, byte a, byte b, Span<byte> rgb)
     {
         var fy = (l * 100.0 / 255 + 16) / 116;
         var fx = fy + (a - 128) / 500.0;

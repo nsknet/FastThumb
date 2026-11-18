@@ -81,8 +81,8 @@ step, is in [docs/architecture.md](docs/architecture.md).
 - **One call, many outputs**: a full-size image plus any number of thumbnail sizes (by longest side), and a preview
   PDF of all pages, from one read of the input.
 - **Wide format coverage**: DOCX, DOC, RTF, ODT, HTML, MHTML, Markdown, text, EPUB, MOBI/AZW3, CHM, XLSX, XLSB, XLS,
-  ODS, CSV, PPTX, PPT, ODP, XPS, PDF, common image formats plus PSD, TGA, EPS, camera RAW and JPEG 2000, and common
-  video containers and codecs.
+  ODS, CSV, PPTX, PPT, ODP, ODG, XPS, PDF, common image formats plus PSD, TGA, EPS, Illustrator, camera RAW, JPEG 2000,
+  CorelDRAW and DICOM, and common video containers and codecs.
   See [docs/formats.md](docs/formats.md).
 - **Content-based detection**: the format is recognised from the bytes; the file name only breaks ties between
   plain-text formats.
@@ -117,9 +117,9 @@ step, is in [docs/architecture.md](docs/architecture.md).
 | E-books and help | EPUB, MOBI/AZW/AZW3, CHM |
 | Legacy (text only) | HWP 5.x, WordPerfect 6+, Microsoft Works |
 | Spreadsheets | XLSX/XLSM/XLTX, XLSB, XLS (BIFF8), ODS/OTS, CSV/TSV |
-| Presentations | PPTX/PPTM/POTX/PPSX, PPT/PPS/POT, ODP/OTP, FODP |
+| Presentations and drawings | PPTX/PPTM/POTX/PPSX, PPT/PPS/POT, ODP/OTP, FODP, ODG/OTG, FODG |
 | Fixed layout | PDF, XPS/OXPS |
-| Images | JPEG, PNG, GIF, WebP, TIFF, HEIF/AVIF, SVG, BMP, ICO, PSD/PSB, TGA, EPS (its preview), camera RAW (its JPEG preview), JPEG 2000 |
+| Images | JPEG, PNG, GIF, WebP, TIFF, HEIF/AVIF, SVG/SVGZ, BMP, ICO, PSD/PSB (layers composited when the file has no real composite), TGA, EPS (its preview), Illustrator AI (PDF-based, or PostScript-based: its thumbnail or paths), camera RAW (its JPEG preview), JPEG 2000, CorelDRAW CDR (its preview), DICOM |
 | Video | MP4/MOV/M4V/3GP, Matroska/WebM, AVI, FLV, ASF/WMV, MPEG-PS/TS, Ogg, RealMedia, MXF and more |
 
 The full list, with what is rendered and the known limitations of each reader, is in [docs/formats.md](docs/formats.md).

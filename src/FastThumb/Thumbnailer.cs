@@ -62,7 +62,8 @@ internal static class Thumbnailer
         {
             if (!want.Picture) return Finish(new ThumbnailResult(format, 1, images, null, default), want, null);
             ThumbnailPlaceholder? placeholder;
-            using (var original = Decode(data, extension, new(options.Limits.MaxPixels, BigEnough(options, want)))) placeholder = EncodeImage(original, images, options, want);
+            using (var original = Decode(Images.ManagedImages.Inflated(data, options.Limits.MaxInputBytes), extension, new(options.Limits.MaxPixels, BigEnough(options, want))))
+                placeholder = EncodeImage(original, images, options, want);
             return Finish(new ThumbnailResult(format, 1, images, null, new(TimeSpan.Zero, TimeSpan.Zero, clock.Elapsed)), want, placeholder);
         }
 
@@ -76,6 +77,15 @@ internal static class Thumbnailer
             {
                 if (texts == null) count = Pdfium.PageCount(data);
                 return Finish(new ThumbnailResult(format, count, images, null, new(Lap(clock), TimeSpan.Zero, TimeSpan.Zero)), want, null, texts, More());
+            }
+            // an Illustrator file saved without PDF content: its page is only a notice, its XMP thumbnail is the picture
+            if (Images.IllustratorPdf.Placeholder(data) is { } thumbnail)
+            {
+                if (texts == null) count = Pdfium.PageCount(data);
+                ThumbnailPlaceholder? fromThumbnail;
+                using (var picture = Images.ManagedImages.Embedded(thumbnail, new(options.Limits.MaxPixels, BigEnough(options, want))))
+                    fromThumbnail = EncodeImage(picture, images, options, want);
+                return Finish(new ThumbnailResult(format, count, images, null, new(Lap(clock), TimeSpan.Zero, Lap(clock))), want, fromThumbnail, texts, More());
             }
             // page 1 is drawn once, large enough for the largest size and for the full size (PageDpi, 72 DPI by default)
             var longSide = !want.Images ? PlaceholderSide

@@ -59,10 +59,17 @@ public enum DocumentFormat
     Xlsb,
     /// <summary>XML Paper Specification (.xps, .oxps).</summary>
     Xps,
-    /// <summary>Raster or vector image (JPEG, PNG, GIF, WebP, TIFF, HEIF/AVIF, SVG, BMP, PSD, TGA, EPS, camera RAW, JPEG 2000, ...).</summary>
+    /// <summary>
+    /// Raster or vector image (JPEG, PNG, GIF, WebP, TIFF, HEIF/AVIF, SVG, BMP, PSD, TGA, EPS, PostScript-based Illustrator,
+    /// camera RAW, JPEG 2000, CorelDRAW preview, DICOM, ...).
+    /// </summary>
     Image,
     /// <summary>Video (MP4/MOV, Matroska/WebM, AVI, MPEG-PS/TS, FLV, ASF/WMV, Ogg, ...).</summary>
     Video,
+    /// <summary>OpenDocument drawing (.odg, .otg).</summary>
+    Odg,
+    /// <summary>OpenDocument drawing as a single XML file (.fodg).</summary>
+    Fodg,
 }
 
 /// <summary>One encoded thumbnail.</summary>
