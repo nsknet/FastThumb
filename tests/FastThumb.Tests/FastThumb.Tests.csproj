@@ -12,6 +12,8 @@
     <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(NetFrameworkTarget);$(TargetFrameworks)</TargetFrameworks>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <!-- one target framework at a time: several test hosts at once slow each other past the time limits of some tests -->
+    <TestTfmsInParallel>false</TestTfmsInParallel>
     <RootNamespace>FastThumb.Tests</RootNamespace>
     <!-- CA1416: libvips is portable even though some NetVips APIs carry platform attributes -->
     <NoWarn>$(NoWarn);CA1416</NoWarn>

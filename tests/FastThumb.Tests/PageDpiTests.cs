@@ -3,6 +3,7 @@ using FastThumb.Tests.Fixtures;
 
 namespace FastThumb.Tests;
 
+[Collection(Timed.Name)]   // times a page against a cancellation: no other test may hold the PDFium lock meanwhile
 public class PageDpiTests
 {
     private static readonly ThumbnailOptions Images = ThumbnailOptions.Default with { Outputs = ThumbnailOutputs.Images, EncodeInParallel = false };
